@@ -331,6 +331,20 @@ test('server ordering: /healthz answers while backend.init() is still in flight 
 // in that window (server started, init() still pending against a slow/unreachable upstream --
 // exactly the case the "server ordering" test above already exercises) exited the process via the
 // signal itself (code=null, signal='SIGINT') instead of index.ts's documented exit-0 graceful path.
+//
+// Uses a real local TCP listener that accepts the connection and never responds, not the "server
+// ordering" test's blackholed 203.0.113.1 -- a second real CI run found that address makes this
+// specific test unfixable via REQUEST_TIMEOUT_SECONDS: the TCP connect attempt itself hangs for
+// createAgent()'s hardcoded 10s connectTimeoutMs (not configurable, and independent of
+// REQUEST_TIMEOUT_SECONDS), which is already at lifecycle.ts's 10s hard-exit budget before
+// generatetoken's own request-level timeout ever gets a chance to matter -- confirmed directly: a
+// REQUEST_TIMEOUT_SECONDS=3 version of this test still took ~10.2s and still hit the hard-exit
+// timer, identically to the REQUEST_TIMEOUT_SECONDS=30 version before it. A listener that accepts
+// the connection immediately (as a real, if slow-to-respond, FMC host would) makes generatetoken's
+// own REQUEST_TIMEOUT_SECONDS the actual governing timeout, matching the pattern the --dump-raw
+// test below already uses for the same reason (a fast, real TCP accept, deliberately slow/absent
+// response).
+//
 // win32-skipped for the same reason as the SIGTERM/SIGINT tests above: child_process.kill() doesn't
 // deliver a real, catchable signal to a Node.js child there. ---
 for (const signal of ['SIGTERM', 'SIGINT'] as const) {
@@ -341,47 +355,62 @@ for (const signal of ['SIGTERM', 'SIGINT'] as const) {
         : false,
   }, async (t) => {
     if (!requireDistBuilt(t)) return;
+
+    // Accepts every connection and never writes a response -- generatetoken's
+    // own request stays pending until REQUEST_TIMEOUT_SECONDS aborts it,
+    // which is the timeout this test actually needs to control.
+    const upstream = createServer((socket) => {
+      socket.on('error', () => {
+        // best-effort: a reset/close from the client side during shutdown is expected, not a test failure.
+      });
+    });
+    await new Promise<void>((resolve) => upstream.listen(0, '127.0.0.1', resolve));
+    const upstreamAddress = upstream.address();
+    const upstreamPort =
+      upstreamAddress !== null && typeof upstreamAddress !== 'string' ? upstreamAddress.port : 0;
+
     const port = await findFreePort();
     const exporter = spawnExporter([], {
       PATH: process.env.PATH ?? '',
       BACKEND_TYPE: 'fmc',
       METRICS_PORT: String(port),
       METRICS_BIND_ADDRESS: '127.0.0.1',
-      FMC_HOST: '203.0.113.1', // RFC 5737 TEST-NET-3 -- documented non-routable, never answers.
+      FMC_HOST: `127.0.0.1:${upstreamPort}`,
       FMC_USERNAME: 'svc',
       FMC_PASSWORD: 'a-realistic-looking-password',
       FMC_TLS_INSECURE_SKIP_VERIFY: 'true',
       // Short, not generous, unlike the "server ordering" test above: this
       // test needs a full graceful shutdown (server.stop -> poller.stop ->
       // backend.close) to actually complete within lifecycle.ts's 10s
-      // hard-exit budget, not just needs init() to still be pending when
-      // the signal arrives. undici's Agent.close() waits for the in-flight
+      // hard-exit budget. undici's Agent.close() waits for the in-flight
       // generatetoken POST to settle rather than aborting it outright, and
-      // that POST's own timeout is REQUEST_TIMEOUT_SECONDS -- a first
-      // version of this test used '30' (copying the "server ordering"
-      // test's SIGKILL-only value) and reliably hit the hard-exit timer
-      // instead of a clean exit 0, confirmed on a real CI run
-      // (code=1, signal=null at ~10.2s). 3s leaves ample margin against
-      // both the hard-exit budget and CI runner slowness.
+      // with a real fast TCP accept (unlike the blackholed-address version
+      // of this test that preceded this fix) that POST's own timeout is
+      // genuinely REQUEST_TIMEOUT_SECONDS, not createAgent()'s separate,
+      // non-configurable 10s connectTimeoutMs.
       REQUEST_TIMEOUT_SECONDS: '3',
       LOG_LEVEL: 'error',
       LOG_FORMAT: 'json',
       ENABLE_DEFAULT_METRICS: 'false',
     });
-    // No delay after the port binds -- the point is to catch the signal as
-    // close as possible to the start of backend.init(), the exact window
-    // the original bug left unguarded.
-    await waitForPortListening(port, 5_000);
+    try {
+      // No delay after the port binds -- the point is to catch the signal
+      // as close as possible to the start of backend.init(), the exact
+      // window the original bug left unguarded.
+      await waitForPortListening(port, 5_000);
 
-    const killed = exporter.child.kill(signal);
-    assert.ok(killed, `child.kill(${signal}) reported failure`);
+      const killed = exporter.child.kill(signal);
+      assert.ok(killed, `child.kill(${signal}) reported failure`);
 
-    const { code, signal: exitSignal } = await exporter.exitCode;
-    assert.equal(
-      code,
-      0,
-      `expected exit code 0 after ${signal} during backend.init(), got code=${code} signal=${exitSignal}`,
-    );
+      const { code, signal: exitSignal } = await exporter.exitCode;
+      assert.equal(
+        code,
+        0,
+        `expected exit code 0 after ${signal} during backend.init(), got code=${code} signal=${exitSignal}`,
+      );
+    } finally {
+      upstream.close();
+    }
   });
 }
 
