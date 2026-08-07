@@ -69,7 +69,7 @@ test('createSpacingGuard: concurrent wait() calls serialize by minSpacingMs each
   // whether the F4 fix is present or reverted, so it would silently pass
   // either way — a real clock is required to observe genuine interleaving).
   const clock = createRealClock();
-  const guard = createSpacingGuard({ clock, minSpacingMs: 100 });
+  const guard = createSpacingGuard({ clock, minSpacingMs: 150 });
   const start = clock.now();
 
   const releaseTimes = await Promise.all(
@@ -79,12 +79,20 @@ test('createSpacingGuard: concurrent wait() calls serialize by minSpacingMs each
     }),
   );
 
+  // Tolerance is deliberately wide (100ms against a 150ms floor, i.e. up to
+  // 50ms of real-clock scheduling slop) rather than tight against the
+  // configured floor — a real CI run (windows-latest, Node current)
+  // measured a genuine 85.9ms gap against a 90ms-floor version of this
+  // assertion under load, well above what the bug this test guards against
+  // would ever produce: the original F4 regression released three
+  // concurrent callers together at the *same* instant (a ~0ms gap), so even
+  // this much slack cannot mask a recurrence.
   const sorted = [...releaseTimes].sort((a, b) => a - b);
   for (let i = 1; i < sorted.length; i++) {
     const gap = (sorted[i] as number) - (sorted[i - 1] as number);
     assert.ok(
-      gap >= 90,
-      `expected each release to be spaced by ~100ms from the previous one, got a gap of ${gap}ms (releases: ${sorted.join(', ')})`,
+      gap >= 100,
+      `expected each release to be spaced by ~150ms from the previous one, got a gap of ${gap}ms (releases: ${sorted.join(', ')})`,
     );
   }
 });
