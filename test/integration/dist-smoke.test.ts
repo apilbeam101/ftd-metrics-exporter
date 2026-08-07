@@ -351,7 +351,19 @@ for (const signal of ['SIGTERM', 'SIGINT'] as const) {
       FMC_USERNAME: 'svc',
       FMC_PASSWORD: 'a-realistic-looking-password',
       FMC_TLS_INSECURE_SKIP_VERIFY: 'true',
-      REQUEST_TIMEOUT_SECONDS: '30', // generous -- init() must still be pending when the signal arrives.
+      // Short, not generous, unlike the "server ordering" test above: this
+      // test needs a full graceful shutdown (server.stop -> poller.stop ->
+      // backend.close) to actually complete within lifecycle.ts's 10s
+      // hard-exit budget, not just needs init() to still be pending when
+      // the signal arrives. undici's Agent.close() waits for the in-flight
+      // generatetoken POST to settle rather than aborting it outright, and
+      // that POST's own timeout is REQUEST_TIMEOUT_SECONDS -- a first
+      // version of this test used '30' (copying the "server ordering"
+      // test's SIGKILL-only value) and reliably hit the hard-exit timer
+      // instead of a clean exit 0, confirmed on a real CI run
+      // (code=1, signal=null at ~10.2s). 3s leaves ample margin against
+      // both the hard-exit budget and CI runner slowness.
+      REQUEST_TIMEOUT_SECONDS: '3',
       LOG_LEVEL: 'error',
       LOG_FORMAT: 'json',
       ENABLE_DEFAULT_METRICS: 'false',
