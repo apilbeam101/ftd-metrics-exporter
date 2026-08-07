@@ -19,7 +19,7 @@ first item.
 
 ## First publish only (GHCR/npm registry setup)
 
-- [ ] Staged-file audit before the first `git` push: confirm `.env`,
+- [x] Staged-file audit before the first `git` push: confirm `.env`,
       `.scratch/`, `data/`, `node_modules/`, `dist/` have zero entries in
       `git status --porcelain`, then run `gitleaks` locally against the
       staged tree — confirm it reports clean with `.gitleaks.toml`'s
@@ -28,52 +28,90 @@ first item.
       see the comment in `.gitleaks.toml`). Enable GitHub secret-scanning
       push protection before pushing. This step only matters once — after
       the first push, a leaked credential must be rotated, not deleted.
-- [ ] Trigger `scan.yml` once via `workflow_dispatch` after the first image
+      **Done 2026-08-07**: `gitleaks protect --staged` and `gitleaks detect`
+      both reported clean before and after the initial push; secret-scanning
+      + push protection enabled via the API before the first push.
+- [x] Trigger `scan.yml` once via `workflow_dispatch` after the first image
       publish and confirm a tracking issue is actually created on a
       high/critical finding (or confirm none exist) — `gh issue create
       --label base-image-cve` requires that label to already exist in the
       repo; create it first (`gh label create base-image-cve --description
       "Base image CVE tracking" --color b60205`) or the scan job's
       reporting step fails silently on every run.
+      **Done 2026-08-07**: label created, `scan.yml` triggered manually,
+      found 180 high/critical findings in `node:26-slim` and correctly
+      opened [#4](https://github.com/apilbeam101/ftd-metrics-exporter/issues/4)
+      — a base-image finding per SECURITY.md, addressed by the next monthly
+      `rebuild.yml` run, not a source-code defect.
 - [ ] Confirm the `dco` CI job actually blocks a PR with an unsigned commit
       once the repo is on GitHub (push a throwaway branch/PR with one
       unsigned commit against a fork or a test repo first, if possible) —
       this check has only been verified against local git logic, never a
       real `pull_request` event's `base.sha`/`head.sha`.
-- [ ] After the first image publish, set the GHCR package visibility to
+      **Partially exercised 2026-08-07**: the job ran and passed
+      (`base.sha`/`head.sha` resolved correctly) on all three Dependabot
+      PRs merged this session — but Dependabot's own commits already carry
+      a `Signed-off-by` trailer, so this only confirms the job's *positive*
+      path. The negative case (blocking an actually-unsigned commit) is
+      still unverified — still open.
+- [x] After the first image publish, set the GHCR package visibility to
       **public** (it defaults to private) and confirm an anonymous
       `docker pull` from a logged-out client.
+      **Done 2026-08-07**: package visibility confirmed public via the API;
+      all four tags (`0.1.0`, `0.1`, `0`, `latest`) resolve via an anonymous
+      GHCR token-exchange + manifest fetch (no `docker` CLI available on
+      this dev machine, so verified via the raw registry API instead of
+      `docker pull`).
 
 ## Every release
 
-- [ ] **Bump `package.json`'s `version`** to match the tag you're about to
+- [x] **Bump `package.json`'s `version`** to match the tag you're about to
       push, and commit it. `release.yml`'s `verify` job fails the whole
       release if the pushed tag (`vX.Y.Z`) doesn't match `package.json`'s
       version — this is deliberate (a mismatch would otherwise move
       `:latest`/GHCR tags to an image reporting a stale
       `ftd_exporter_build_info{version=}` before the npm publish step fails
       or publishes something unintended).
-- [ ] **Promote `CHANGELOG.md`'s `## [Unreleased]` section to `## [X.Y.Z]`**
+      **v0.1.0 (2026-08-07)**: `package.json` already at `0.1.0` from Stage
+      0; no bump needed for this first release.
+- [x] **Promote `CHANGELOG.md`'s `## [Unreleased]` section to `## [X.Y.Z]`**
       (with today's date) before tagging. `release.yml`'s `release` job
       extracts the section matching the pushed tag's version and fails if
       none exists — this is what makes the promotion a hard gate rather
       than a habit to remember.
+      **v0.1.0 (2026-08-07)**: promoted; verified the extraction script
+      directly against the file before pushing the tag.
 - [ ] Live verification against a real SCC tenant and/or on-prem FMC —
       follow [docs/LIVE_SMOKE_TEST.md](LIVE_SMOKE_TEST.md) and record
       results here (backend × surface × pass/fail × date).
-- [ ] `npm pack` output inspected by eye once before publishing (automated as
+      **v0.1.0**: not re-run for this release — see the existing results
+      log below from the pre-release live smoke test session (same day).
+- [x] `npm pack` output inspected by eye once before publishing (automated as
       a CI tripwire in `release.yml`, but the tripwire itself is worth a
       periodic manual sanity check) — no `.env`, no `data/`, no `.scratch/`,
       no fixtures with real data.
-- [ ] After the release workflow completes: pull the published image
+      **v0.1.0**: N/A this release — npm publishing is gated off
+      (`vars.PUBLISH_NPM`) pending `NPM_TOKEN` setup, so the `npm` job
+      (and its `check-pack-allowlist.ts` step) didn't run. Revisit once npm
+      publishing is enabled.
+- [x] After the release workflow completes: pull the published image
       anonymously and run `gh attestation verify
       oci://ghcr.io/apilbeam101/ftd-metrics-exporter:<tag> -R
       apilbeam101/ftd-metrics-exporter` — confirms provenance actually
       resolves for a real consumer, not just that the workflow step reported
       success.
-- [ ] Confirm the Docker Hub mirror published the same tag (best-effort;
+      **v0.1.0 (2026-08-07)**: verified — real Sigstore certificate, Rekor
+      transparency-log inclusion, and a SLSA provenance statement resolving
+      to the exact tag/commit/workflow run and image digest
+      (`sha256:3ae4a1ab...`).
+- [x] Confirm the Docker Hub mirror published the same tag (best-effort;
       mirror failures are non-fatal to the release, so this is the check
       that catches a silently-failed mirror).
+      **v0.1.0 (2026-08-07)**: mirror job failed as expected — no
+      `DOCKERHUB_USERNAME`/`DOCKERHUB_TOKEN` secrets exist. Non-fatal
+      (`continue-on-error: true`); GHCR + npm remain the primary artifacts
+      per the workflow's own design. Revisit if Docker Hub distribution is
+      wanted later.
 
 ## Quarterly
 
