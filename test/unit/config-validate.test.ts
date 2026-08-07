@@ -369,8 +369,13 @@ test('multiple simultaneous errors are all reported, not just the first', () => 
   assert.ok(result.errors.some((e) => e.includes('SCC_TIME_RANGE')));
 });
 
-// 21. Windows path handling
-test('Windows: FMC_CA_BUNDLE_PATH=C:\\...\\ca.pem resolves and reads correctly', () => {
+// 21. Windows path handling. Windows-only: tmpdir() on Linux/macOS returns a
+// POSIX path, so the assert.match below asserting a "C:\..." shape would
+// fail on every other platform regardless of whether validate() itself
+// handles Windows paths correctly.
+test('Windows: FMC_CA_BUNDLE_PATH=C:\\...\\ca.pem resolves and reads correctly', {
+  skip: process.platform !== 'win32',
+}, () => {
   const caPath = makeTempFile(
     'ca.pem',
     '-----BEGIN CERTIFICATE-----\nplaceholder\n-----END CERTIFICATE-----\n',

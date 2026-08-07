@@ -2,7 +2,7 @@
 
 Every fixture below is either **live-verified** (derived from a real, sanitized upstream capture) or **synthetic** (hand- or script-authored to exercise a case no live capture demonstrates). Fixtures whose upstream field names are unconfirmed on real hardware/configuration are additionally marked **provisional** and carry a `provisional-` filename prefix — do not treat them as evidence of real field names.
 
-Fixtures are regenerated from raw captures in the gitignored `.scratch/` directory via `node --experimental-strip-types scripts/sanitize-fixtures.ts`. That tool and `.scratch/` are maintainer-only (offline, not run in CI, not shipped) — **if you're an external contributor with hardware/configuration we don't have access to** (chassis-based FTD, an HA pair, RA VPN, S2S tunnels), you don't need either: see [CONTRIBUTING.md's fixture-contribution workflow](../CONTRIBUTING.md#contributing-sanitized-fixtures-fmc-schema-unknowns) for the `--dump-raw`-based path instead. Never commit anything from `.scratch/` directly — see the sanitization rules below.
+Fixtures are regenerated from raw captures in the gitignored `.scratch/` directory via `node --experimental-strip-types scripts/sanitize-fixtures.ts`. That tool and `.scratch/` are maintainer-only (offline, not run in CI, not shipped) — **if you're an external contributor with hardware/configuration we don't have access to** (chassis-based FTD, an HA pair, RA VPN, S2S tunnels), you don't need either: see [CONTRIBUTING.md's fixture-contribution workflow](../../CONTRIBUTING.md#contributing-sanitized-fixtures-fmc-schema-unknowns) for the `--dump-raw`-based path instead. Never commit anything from `.scratch/` directly — see the sanitization rules below.
 
 ## SCC (`scc/`)
 

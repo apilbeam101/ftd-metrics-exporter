@@ -52,6 +52,8 @@ or use [deploy/docker-compose.yml](deploy/docker-compose.yml).
 Plain YAML manifests in [deploy/kubernetes/](deploy/kubernetes/) — ConfigMap, Secret, Deployment, Service, ServiceMonitor/PodMonitor, NetworkPolicy:
 
 ```
+cp deploy/kubernetes/secret.example.yaml deploy/kubernetes/secret.yaml
+# edit secret.yaml with real SCC_API_TOKEN or FMC_USERNAME/FMC_PASSWORD
 kubectl apply -f deploy/kubernetes/configmap.yaml
 kubectl apply -f deploy/kubernetes/secret.yaml
 kubectl apply -f deploy/kubernetes/deployment.yaml
