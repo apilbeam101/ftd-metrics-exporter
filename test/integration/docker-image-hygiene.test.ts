@@ -39,10 +39,22 @@ import { gunzipSync } from 'node:zlib';
 const repoRoot = fileURLToPath(new URL('../..', import.meta.url));
 const SENTINEL = 'SENTINEL_SECRET_VALUE_DO_NOT_SHIP_38f1a2';
 
+// GitHub's windows-latest runners ship a Docker CLI/daemon, but configured
+// for Windows containers only -- `docker version` succeeds either way, so
+// checking only that leaves `docker build` against this Dockerfile's Linux
+// (node:26-slim) base failing outright on the real windows-latest CI leg,
+// confirmed directly against the first full-matrix run: both tests here
+// failed with a bare "Command failed: docker build..." (stdio was piped to
+// 'ignore', so the actual daemon error never surfaced) while the equivalent
+// macOS leg (no Docker at all) skipped cleanly via the same function. The
+// daemon's actual OSType is what distinguishes the two cases.
 function dockerAvailable(): boolean {
   try {
     execFileSync('docker', ['version'], { stdio: 'ignore' });
-    return true;
+    const osType = execFileSync('docker', ['info', '--format', '{{.OSType}}'], {
+      encoding: 'utf8',
+    }).trim();
+    return osType === 'linux';
   } catch {
     return false;
   }
@@ -78,7 +90,9 @@ function decompressedBlobs(extractedDir: string): Buffer[] {
 }
 
 test('.dockerignore: a sentinel value in a local .env never reaches any built image layer', {
-  skip: dockerAvailable() ? false : 'docker is not available in this environment',
+  skip: dockerAvailable()
+    ? false
+    : 'docker is not available, or is not configured for Linux containers, in this environment',
   timeout: 180_000,
 }, (t) => {
   const buildDir = buildDirFromRepo();
@@ -125,7 +139,9 @@ test('.dockerignore: a sentinel value in a local .env never reaches any built im
  * planted credential file).
  */
 test('shipped runtime image contains only dist/ and package manifests under /app -- no source, no stray files', {
-  skip: dockerAvailable() ? false : 'docker is not available in this environment',
+  skip: dockerAvailable()
+    ? false
+    : 'docker is not available, or is not configured for Linux containers, in this environment',
   timeout: 180_000,
 }, (t) => {
   const buildDir = buildDirFromRepo();
