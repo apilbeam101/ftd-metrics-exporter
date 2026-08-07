@@ -72,6 +72,22 @@ export interface CreateTestAppOptions {
   clock?: Clock;
   random?: () => number;
   maxBackoffMs?: number;
+  /**
+   * Stops the poller as soon as this many cycles have completed, from
+   * *inside* the synchronous onCycleComplete callback rather than a test
+   * separately noticing via waitForCycles and calling stopPoller() itself.
+   * That two-step version has a real, reproduced-on-CI gap: waitForCycles
+   * polls on a 10ms real-timer interval, so at a short pollIntervalSeconds
+   * (e.g. soak.test.ts's 0.02s) the poller's own loop can start and
+   * complete another cycle before the test's polling loop ever wakes up to
+   * call stopPoller(). Per src/poller/poller.ts's own loop(): runCycle()
+   * calls onCycleComplete synchronously as its last step, then loop()
+   * immediately re-checks controller.signal.aborted before scheduling the
+   * next abortableSleep -- so a synchronous poller.stop() from inside this
+   * callback closes the window completely, with no gap for a next cycle to
+   * start in.
+   */
+  stopAfterCycles?: number;
 }
 
 export interface ScrapeResult {
@@ -167,7 +183,12 @@ export async function createTestApp(options: CreateTestAppOptions): Promise<Test
     parseErrorTracker,
     random: options.random ?? (() => 0),
     ...(options.maxBackoffMs !== undefined && { maxBackoffMs: options.maxBackoffMs }),
-    onCycleComplete: (result) => results.push(result),
+    onCycleComplete: (result) => {
+      results.push(result);
+      if (options.stopAfterCycles !== undefined && results.length >= options.stopAfterCycles) {
+        poller.stop();
+      }
+    },
   });
   poller.start();
 

@@ -83,7 +83,12 @@ test(`soak (${CYCLES} cycles): series count stays stable throughout and heap usa
     dispatcher: new Agent({ connect: { rejectUnauthorized: true } }),
   });
 
-  const app = await createTestApp({ backend, metrics, pollIntervalSeconds: 0.02 });
+  const app = await createTestApp({
+    backend,
+    metrics,
+    pollIntervalSeconds: 0.02,
+    stopAfterCycles: CYCLES,
+  });
   try {
     // Warm up before taking the baseline — the first few cycles allocate
     // steady-state structures (label hash maps, connection pool buffers)
@@ -99,15 +104,15 @@ test(`soak (${CYCLES} cycles): series count stays stable throughout and heap usa
       await app.waitForCycles(target, 45_000);
       seriesCounts.push(await seriesCountAt(app));
     }
-    // Stop scheduling further cycles the instant the last sample is in hand
-    // — pollIntervalSeconds is 0.02s here, so any wall-clock time spent on
-    // the assertions/heap-measurement below (the finally block's app.stop()
-    // is not reached until after all of them) is enough for one more cycle
-    // to complete and push server.requests.length/app.results.length past
-    // CYCLES, exactly the kind of timing-dependent extra request the
-    // "exactly one upstream request per cycle" assertion below is meant to
-    // catch — reproduced on a real CI run (101 !== 100) before this fix.
-    app.stopPoller();
+    // stopAfterCycles above stops the poller synchronously from inside
+    // onCycleComplete, the instant cycle CYCLES completes -- a prior
+    // version of this test called app.stopPoller() here instead, reacting
+    // to waitForCycles noticing results.length >= CYCLES via its own
+    // 10ms-interval polling loop. That version still had a real gap: the
+    // poller's own loop can start and complete cycle CYCLES+1 before the
+    // test's polling loop ever wakes up, at this test's short (0.02s)
+    // pollIntervalSeconds -- reproduced twice on real CI (101 !== 100),
+    // including once after the stopPoller() fix was already in place.
     assert.ok(
       app.results.every((r) => r.outcome === 'success'),
       'every soak cycle against a stable healthy fixture must succeed',
