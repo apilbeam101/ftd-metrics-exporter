@@ -1,0 +1,7 @@
+# Force LF on checkout regardless of platform/core.autocrlf. Windows CI
+# runners default to core.autocrlf=true, which rewrote every text file
+# (including test/fixtures/golden/*.prom) to CRLF on checkout -- the
+# exporter always renders \n, so the golden-output tests failed on Windows
+# only, on the first real multi-OS CI run. No file in this repo is meant to
+# ship with CRLF.
+* text=auto eol=lf

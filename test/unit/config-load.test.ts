@@ -133,6 +133,17 @@ test('an explicitly-requested --env-file that fails for a reason other than ENOE
 // checks existsSync() first. Windows-only: icacls is not available elsewhere,
 // and POSIX's chmod-based equivalent of this failure already reports EACCES
 // correctly (not the bug this test guards against).
+//
+// Denies read access to the current process's own SID explicitly, rather
+// than granting access only to an unrelated principal (e.g. SYSTEM) and
+// relying on every other account being excluded by omission -- the first
+// real run of this test on GitHub's windows-latest runner found that
+// grant-only-to-SYSTEM left the file still readable by whatever account
+// actually ran the step, so loadConfig() never hit the permission-denied
+// path at all. Resolved via PowerShell rather than `whoami`, since some
+// Windows identity setups (e.g. a hybrid-AD-joined account name) can't be
+// mapped to a SID by icacls from the account name alone -- a SID lookup
+// is reliable across setups in a way an account-name lookup is not.
 test('loadEnvFile: an existing but permission-denied .env is reported distinctly from a missing one', {
   skip: process.platform !== 'win32',
 }, (t) => {
@@ -144,8 +155,19 @@ test('loadEnvFile: an existing but permission-denied .env is reported distinctly
   const envPath = join(dir, '.env');
   writeFileSync(envPath, 'BACKEND_TYPE=scc\n');
 
+  const sid = execFileSync(
+    'powershell.exe',
+    [
+      '-NoProfile',
+      '-NonInteractive',
+      '-Command',
+      '[System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value',
+    ],
+    { encoding: 'utf8' },
+  ).trim();
+
   execFileSync('icacls', [envPath, '/inheritance:r']);
-  execFileSync('icacls', [envPath, '/grant:r', 'NT AUTHORITY\\SYSTEM:F']);
+  execFileSync('icacls', [envPath, '/deny', `*${sid}:(R)`]);
   t.after(() => execFileSync('icacls', [envPath, '/reset']));
 
   assert.throws(() => loadConfig(['--env-file', envPath]), /exists but could not be read/);
