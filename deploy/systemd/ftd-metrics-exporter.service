@@ -1,0 +1,33 @@
+[Unit]
+Description=ftd-metrics-exporter
+After=network-online.target
+Wants=network-online.target
+
+# Disable systemd's default start-rate limiter (5 starts / 10s). The exporter
+# exits within ~15ms on a config-validation or backend-init failure, so a
+# persistent-but-transient upstream problem (FMC rebooting, a DNS blip) would
+# otherwise exhaust the burst in ~25s and leave the unit permanently `failed`
+# until a manual `systemctl reset-failed` — the opposite of Restart=always's
+# purpose here, which is to keep running rather than give up.
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=ftd-exporter
+Group=ftd-exporter
+WorkingDirectory=/opt/ftd-metrics-exporter
+EnvironmentFile=/opt/ftd-metrics-exporter/.env
+ExecStart=/usr/bin/node /opt/ftd-metrics-exporter/dist/index.js
+Restart=always
+RestartSec=5
+
+# Hardening. ReadWritePaths is intentionally empty: the
+# exporter never writes to disk (in-memory cache, stdout logging only).
+NoNewPrivileges=yes
+ProtectSystem=strict
+PrivateTmp=yes
+ProtectHome=yes
+ReadWritePaths=
+
+[Install]
+WantedBy=multi-user.target

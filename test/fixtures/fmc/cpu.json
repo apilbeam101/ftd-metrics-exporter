@@ -1,0 +1,28 @@
+{
+  "links": {
+    "self": "https://fmc.example.internal/api/fmc_config/v1/domain/00000000-0000-4000-8000-000000000002/health/aggregatemetrics?offset=0&limit=25&filter=device_uuid:00000000-0000-4000-8000-000000000003;metric:CPU;timeRange:5m"
+  },
+  "items": [
+    {
+      "startTime": "2026-07-31 08:50:36.550 UTC",
+      "endTime": "2026-07-31 08:55:36.550 UTC",
+      "cpuHealthMetrics": {
+        "linaUsageAvg": 0.3,
+        "snortUsageAvg": 0.29,
+        "systemUsageAvg": 19
+      },
+      "links": {
+        "self": "https://fmc.example.internal/api/fmc_config/v1/domain/00000000-0000-4000-8000-000000000002/health/aggregatemetrics/00000000-0000-4000-8000-000000000003"
+      },
+      "name": "ftd1.lab.example",
+      "id": "00000000-0000-4000-8000-000000000003",
+      "type": "AggregateMetric"
+    }
+  ],
+  "paging": {
+    "offset": 0,
+    "limit": 25,
+    "count": 1,
+    "pages": 1
+  }
+}

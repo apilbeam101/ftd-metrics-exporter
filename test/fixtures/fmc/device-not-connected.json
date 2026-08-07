@@ -1,0 +1,11 @@
+{
+  "error": {
+    "category": "FRAMEWORK",
+    "messages": [
+      {
+        "description": "Device not connected."
+      }
+    ],
+    "severity": "ERROR"
+  }
+}

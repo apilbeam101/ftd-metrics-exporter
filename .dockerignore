@@ -1,0 +1,25 @@
+# A load-bearing security control, not housekeeping — a stray local .env or
+# credential file baked into an image layer is a real and common accident.
+# Docker's exclusion patterns, unlike git's, only match at the context root
+# unless prefixed with **/ — every entry here is **/-prefixed so a nested
+# .env or key file (e.g. sub/.env, certs/fmc-ca.pem) is excluded too, not
+# just one at the repo root.
+**/.env
+**/.env.*
+**/*.env
+!example.env
+**/*.pem
+**/*.key
+**/*.crt
+**/*.p12
+
+.git
+node_modules
+dist
+.claude
+
+.scratch
+data
+test
+docs
+*.md

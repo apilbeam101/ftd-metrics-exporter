@@ -1,0 +1,15 @@
+.env
+.env.*
+!example.env
+node_modules/
+dist/
+*.pem
+*.key
+*.crt
+*.p12
+
+/data/
+/.scratch/
+
+CLAUDE.md
+.claude/

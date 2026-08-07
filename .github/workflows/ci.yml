@@ -1,0 +1,212 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Fast leg: every push/PR, ubuntu only. Split out so a typecheck/lint/unit
+  # failure reports back well before the full OS matrix and Docker builds
+  # finish.
+  fast:
+    name: typecheck, lint, unit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run test:unit
+
+  # Full matrix: OS x Node, gated behind the fast leg so a typecheck/lint
+  # failure doesn't burn matrix minutes. Requires ubuntu/macos/windows green
+  # -- this is where Windows-only bugs are meant to surface, and prior
+  # stages have found real ones here.
+  matrix:
+    name: test (${{ matrix.os }}, node ${{ matrix.node }})
+    needs: fast
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node: ["24", "current"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      # A review found this job previously ran only `npm test`, which uses
+      # --experimental-strip-types (erases annotations without checking
+      # them) and never builds dist/ -- so a Windows/macOS-only *type*
+      # error was caught on no matrix leg at all (only the ubuntu-only
+      # `fast` job typechecks), and every dist-smoke.test.ts subprocess
+      # test silently skipped rather than running, on every OS. `build`
+      # also makes dist-smoke.test.ts's CI-vs-dev-machine skip guard
+      # (test/integration/dist-smoke.test.ts's requireDistBuilt) a no-op
+      # here rather than the loud failure it becomes without this step.
+      - run: npm run build
+      - run: npm run typecheck
+      - run: npm test
+
+  # Multi-arch image build, PRs only -- proves the Dockerfile still builds
+  # for both architectures without pushing anything. Publishing is the
+  # release workflow's job, triggered by tags.
+  image:
+    name: docker build (amd64 + arm64, no push)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4.2.0
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+      - uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: false
+          load: false
+          tags: ftd-metrics-exporter:ci
+
+      # The .dockerignore/image-hygiene tests self-skip when docker isn't on
+      # PATH (true on a plain Windows dev machine) -- this is the first
+      # environment where they actually run. Runs after the buildx check
+      # above so a broken Dockerfile fails there first, with a clearer
+      # message than the hygiene test would give.
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - run: node --experimental-strip-types --expose-gc --test "test/integration/docker-image-hygiene.test.ts"
+
+  # npm audit on production dependencies only -- a high/critical dev-only
+  # advisory must not block CI (Stage 14 testing step 4).
+  audit:
+    name: npm audit (prod deps)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - run: npm audit --omit=dev --audit-level=high
+
+  # Dependency license compliance: fails if a production dependency's
+  # license isn't in the allowlist below. Scoped to production deps only,
+  # mirroring the audit job above -- a dev-only tool's license has no
+  # bearing on what ships to a customer. license-checker-rseidelsohn is run
+  # via npx rather than added as a devDependency, since it's invoked only
+  # in this one CI step and a minimal runtime dependency count is treated
+  # as a security control in this project.
+  licenses:
+    name: license compliance (prod deps)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - run: |
+          npx --yes license-checker-rseidelsohn@4.4.2 --production \
+            --onlyAllow "MIT;Apache-2.0;BSD-2-Clause;BSD-3-Clause;ISC;0BSD;CC0-1.0;Unlicense;MIT OR Apache-2.0;Apache-2.0 OR MIT" \
+            --summary
+      # Backstop for a real --onlyAllow gap found by review: a compound SPDX
+      # expression like "(MIT AND GPL-3.0)" passes --onlyAllow above because
+      # its individual disjuncts/conjuncts appear in the allowlist string --
+      # but AND means both licenses' obligations apply, so a copyleft
+      # conjunct sails through unnoticed. See scripts/check-license-compound.ts.
+      - run: node --experimental-strip-types scripts/check-license-compound.ts
+
+  # No-native-addons check (G7): fails if any installed package ships a
+  # native build step, which would break the "identical across
+  # Windows/macOS/Linux, no compiler toolchain" guarantee. A raw-text grep
+  # for "install" was tried first and found (by review) to miss a
+  # gypfile-only/binding.gyp package entirely while false-positiving on any
+  # unrelated field merely containing the substring "install" -- see
+  # scripts/check-no-native-addons.ts's own doc comment and
+  # test/unit/check-no-native-addons.test.ts for both repros.
+  no-native-addons:
+    name: no native build steps
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - run: node --experimental-strip-types scripts/check-no-native-addons.ts
+
+  # DCO sign-off (CONTRIBUTING.md): every commit in a PR must carry a
+  # Signed-off-by trailer. CONTRIBUTING.md states this is enforced -- a
+  # review found nothing actually enforced it, so it was a promise resting
+  # entirely on a maintainer remembering to check by hand on every PR.
+  # pull_request only (a push to main has already been merged; there's
+  # nothing left to block at that point).
+  dco:
+    name: DCO sign-off
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Verify every commit in this PR has a Signed-off-by trailer
+        run: |
+          missing=0
+          for sha in $(git rev-list "${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}"); do
+            if ! git log -1 --format=%B "$sha" | grep -qi '^Signed-off-by: '; then
+              echo "Missing Signed-off-by trailer: $sha $(git log -1 --format=%s "$sha")"
+              missing=1
+            fi
+          done
+          if [ "$missing" -eq 1 ]; then
+            echo "One or more commits are missing a DCO sign-off. See CONTRIBUTING.md." >&2
+            exit 1
+          fi
+
+  # Secret scanning over the full history on every push/PR. Free for public
+  # repos (personal account, no GITLEAKS_LICENSE required -- gitleaks-action
+  # docs: license is only needed for organization-owned repos).
+  secrets:
+    name: gitleaks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Fixture-sanitization guard (Stage 1) -- re-run here so a future fixture
+  # addition can't reintroduce a real UUID/IPv4 without CI catching it.
+  fixtures:
+    name: fixture sanitization guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - run: node --experimental-strip-types --test "test/unit/fixture-sanitization.test.ts" "test/unit/fixture-schema-shape.test.ts"

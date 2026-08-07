@@ -1,0 +1,11 @@
+{
+  "error": {
+    "category": "FRAMEWORK",
+    "messages": [
+      {
+        "description": "Unsupported device"
+      }
+    ],
+    "severity": "ERROR"
+  }
+}

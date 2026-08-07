@@ -1,0 +1,121 @@
+# HELP ftd_cpu_usage_ratio Average CPU utilization over the sample window, 0-1.
+# TYPE ftd_cpu_usage_ratio gauge
+ftd_cpu_usage_ratio{device_uid="00000000-0000-4000-8000-000000000020",device_name="ftd-chassis-ha-vpn",component="lina"} 0.124
+ftd_cpu_usage_ratio{device_uid="00000000-0000-4000-8000-000000000020",device_name="ftd-chassis-ha-vpn",component="snort"} 0.317
+ftd_cpu_usage_ratio{device_uid="00000000-0000-4000-8000-000000000020",device_name="ftd-chassis-ha-vpn",component="system"} 0.22
+
+# HELP ftd_memory_usage_ratio Average memory utilization over the sample window, 0-1.
+# TYPE ftd_memory_usage_ratio gauge
+ftd_memory_usage_ratio{device_uid="00000000-0000-4000-8000-000000000020",device_name="ftd-chassis-ha-vpn",component="lina"} 0.401
+ftd_memory_usage_ratio{device_uid="00000000-0000-4000-8000-000000000020",device_name="ftd-chassis-ha-vpn",component="snort"} 0.253
+ftd_memory_usage_ratio{device_uid="00000000-0000-4000-8000-000000000020",device_name="ftd-chassis-ha-vpn",component="system"} 0.5589999999999999
+
+# HELP ftd_disk_usage_ratio Average disk utilization over the sample window, 0-1.
+# TYPE ftd_disk_usage_ratio gauge
+ftd_disk_usage_ratio{device_uid="00000000-0000-4000-8000-000000000020",device_name="ftd-chassis-ha-vpn"} 0.332
+
+# HELP ftd_interface_input_bytes_avg Average inbound byte counter over the sample window.
+# TYPE ftd_interface_input_bytes_avg gauge
+ftd_interface_input_bytes_avg{device_uid="00000000-0000-4000-8000-000000000020",device_name="ftd-chassis-ha-vpn",interface="Ethernet1/1",interface_name="outside",interface_type="Ethernet"} 1000
+
+# HELP ftd_interface_output_bytes_avg Average outbound byte counter over the sample window.
+# TYPE ftd_interface_output_bytes_avg gauge
+ftd_interface_output_bytes_avg{device_uid="00000000-0000-4000-8000-000000000020",device_name="ftd-chassis-ha-vpn",interface="Ethernet1/1",interface_name="outside",interface_type="Ethernet"} 2000
+
+# HELP ftd_interface_input_packet_size_avg_bytes Average inbound packet size over the sample window.
+# TYPE ftd_interface_input_packet_size_avg_bytes gauge
+
+# HELP ftd_interface_output_packet_size_avg_bytes Average outbound packet size over the sample window.
+# TYPE ftd_interface_output_packet_size_avg_bytes gauge
+
+# HELP ftd_interface_input_errors_avg Average inbound error count over the sample window.
+# TYPE ftd_interface_input_errors_avg gauge
+
+# HELP ftd_interface_output_errors_avg Average outbound error count over the sample window.
+# TYPE ftd_interface_output_errors_avg gauge
+
+# HELP ftd_interface_drop_packets_avg Average dropped packet count over the sample window.
+# TYPE ftd_interface_drop_packets_avg gauge
+
+# HELP ftd_interface_buffer_overruns_avg Average buffer overrun count over the sample window.
+# TYPE ftd_interface_buffer_overruns_avg gauge
+
+# HELP ftd_interface_buffer_underruns_avg Average buffer underrun count over the sample window.
+# TYPE ftd_interface_buffer_underruns_avg gauge
+
+# HELP ftd_interface_l2_decode_drops_avg Average L2 decode drop count over the sample window.
+# TYPE ftd_interface_l2_decode_drops_avg gauge
+
+# HELP ftd_interface_link_up 1 if the interface link is up, 0 if down. Omitted when link status is unrecognized.
+# TYPE ftd_interface_link_up gauge
+ftd_interface_link_up{device_uid="00000000-0000-4000-8000-000000000020",device_name="ftd-chassis-ha-vpn",interface="Ethernet1/1",interface_name="outside",interface_type="Ethernet"} 1
+
+# HELP ftd_interface_operational_up 1 if the interface is operationally up, 0 if down. Omitted when operational status is unrecognized.
+# TYPE ftd_interface_operational_up gauge
+ftd_interface_operational_up{device_uid="00000000-0000-4000-8000-000000000020",device_name="ftd-chassis-ha-vpn",interface="Ethernet1/1",interface_name="outside",interface_type="Ethernet"} 1
+
+# HELP ftd_interface_duplex_info Always 1. Informational; duplex_mode carries the reported value.
+# TYPE ftd_interface_duplex_info gauge
+
+# HELP ftd_chassis_fan_rpm Chassis fan speed in RPM.
+# TYPE ftd_chassis_fan_rpm gauge
+ftd_chassis_fan_rpm{device_uid="00000000-0000-4000-8000-000000000020",device_name="ftd-chassis-ha-vpn",fan="1"} 4200
+ftd_chassis_fan_rpm{device_uid="00000000-0000-4000-8000-000000000020",device_name="ftd-chassis-ha-vpn",fan="2"} 4150
+ftd_chassis_fan_rpm{device_uid="00000000-0000-4000-8000-000000000020",device_name="ftd-chassis-ha-vpn",fan="3"} 4180
+ftd_chassis_fan_rpm{device_uid="00000000-0000-4000-8000-000000000020",device_name="ftd-chassis-ha-vpn",fan="4"} 4190
+
+# HELP ftd_chassis_psu_fan_up 1 if the PSU fan status is up, 0 if down. Omitted when unrecognized.
+# TYPE ftd_chassis_psu_fan_up gauge
+ftd_chassis_psu_fan_up{device_uid="00000000-0000-4000-8000-000000000020",device_name="ftd-chassis-ha-vpn",psu="1"} 1
+ftd_chassis_psu_fan_up{device_uid="00000000-0000-4000-8000-000000000020",device_name="ftd-chassis-ha-vpn",psu="2"} 1
+
+# HELP ftd_chassis_psu_input_up 1 if the PSU input status is up, 0 if down. Omitted when unrecognized.
+# TYPE ftd_chassis_psu_input_up gauge
+ftd_chassis_psu_input_up{device_uid="00000000-0000-4000-8000-000000000020",device_name="ftd-chassis-ha-vpn",psu="1"} 1
+ftd_chassis_psu_input_up{device_uid="00000000-0000-4000-8000-000000000020",device_name="ftd-chassis-ha-vpn",psu="2"} 1
+
+# HELP ftd_chassis_psu_output_up 1 if the PSU output status is up, 0 if down. Omitted when unrecognized.
+# TYPE ftd_chassis_psu_output_up gauge
+ftd_chassis_psu_output_up{device_uid="00000000-0000-4000-8000-000000000020",device_name="ftd-chassis-ha-vpn",psu="1"} 1
+ftd_chassis_psu_output_up{device_uid="00000000-0000-4000-8000-000000000020",device_name="ftd-chassis-ha-vpn",psu="2"} 0
+
+# HELP ftd_ha_node_status State set: exactly one status label is 1 for a given device.
+# TYPE ftd_ha_node_status gauge
+ftd_ha_node_status{device_uid="00000000-0000-4000-8000-000000000020",device_name="ftd-chassis-ha-vpn",status="normal"} 1
+ftd_ha_node_status{device_uid="00000000-0000-4000-8000-000000000020",device_name="ftd-chassis-ha-vpn",status="error"} 0
+ftd_ha_node_status{device_uid="00000000-0000-4000-8000-000000000020",device_name="ftd-chassis-ha-vpn",status="warning"} 0
+ftd_ha_node_status{device_uid="00000000-0000-4000-8000-000000000020",device_name="ftd-chassis-ha-vpn",status="disabled"} 0
+ftd_ha_node_status{device_uid="00000000-0000-4000-8000-000000000020",device_name="ftd-chassis-ha-vpn",status="unknown"} 0
+
+# HELP ftd_ha_node_info Always 1. Informational; node_type carries the HA role.
+# TYPE ftd_ha_node_info gauge
+ftd_ha_node_info{device_uid="00000000-0000-4000-8000-000000000020",device_name="ftd-chassis-ha-vpn",node_type="primary"} 1
+
+# HELP ftd_ravpn_sessions_active_avg Average active RA VPN session count over the sample window.
+# TYPE ftd_ravpn_sessions_active_avg gauge
+ftd_ravpn_sessions_active_avg{device_uid="00000000-0000-4000-8000-000000000020",device_name="ftd-chassis-ha-vpn"} 42
+
+# HELP ftd_ravpn_sessions_inactive_avg Average inactive RA VPN session count over the sample window.
+# TYPE ftd_ravpn_sessions_inactive_avg gauge
+ftd_ravpn_sessions_inactive_avg{device_uid="00000000-0000-4000-8000-000000000020",device_name="ftd-chassis-ha-vpn"} 3
+
+# HELP ftd_ravpn_sessions_peak_concurrent Peak concurrent RA VPN session count over the sample window.
+# TYPE ftd_ravpn_sessions_peak_concurrent gauge
+ftd_ravpn_sessions_peak_concurrent{device_uid="00000000-0000-4000-8000-000000000020",device_name="ftd-chassis-ha-vpn"} 58
+
+# HELP ftd_s2s_tunnel_state State set: exactly one state label is 1 for a given tunnel.
+# TYPE ftd_s2s_tunnel_state gauge
+ftd_s2s_tunnel_state{device_uid="00000000-0000-4000-8000-000000000020",device_name="ftd-chassis-ha-vpn",tunnel_id="tunnel-1",tunnel_name="hq-to-branch-1",state="up"} 1
+ftd_s2s_tunnel_state{device_uid="00000000-0000-4000-8000-000000000020",device_name="ftd-chassis-ha-vpn",tunnel_id="tunnel-1",tunnel_name="hq-to-branch-1",state="down"} 0
+ftd_s2s_tunnel_state{device_uid="00000000-0000-4000-8000-000000000020",device_name="ftd-chassis-ha-vpn",tunnel_id="tunnel-1",tunnel_name="hq-to-branch-1",state="unknown"} 0
+ftd_s2s_tunnel_state{device_uid="00000000-0000-4000-8000-000000000020",device_name="ftd-chassis-ha-vpn",tunnel_id="tunnel-2",tunnel_name="hq-to-branch-2",state="up"} 0
+ftd_s2s_tunnel_state{device_uid="00000000-0000-4000-8000-000000000020",device_name="ftd-chassis-ha-vpn",tunnel_id="tunnel-2",tunnel_name="hq-to-branch-2",state="down"} 1
+ftd_s2s_tunnel_state{device_uid="00000000-0000-4000-8000-000000000020",device_name="ftd-chassis-ha-vpn",tunnel_id="tunnel-2",tunnel_name="hq-to-branch-2",state="unknown"} 0
+
+# HELP ftd_health_window_start_timestamp_seconds Start of the averaging window this snapshot describes, unix seconds.
+# TYPE ftd_health_window_start_timestamp_seconds gauge
+ftd_health_window_start_timestamp_seconds{device_uid="00000000-0000-4000-8000-000000000020",device_name="ftd-chassis-ha-vpn"} 1785491285
+
+# HELP ftd_health_window_end_timestamp_seconds End of the averaging window this snapshot describes, unix seconds.
+# TYPE ftd_health_window_end_timestamp_seconds gauge
+ftd_health_window_end_timestamp_seconds{device_uid="00000000-0000-4000-8000-000000000020",device_name="ftd-chassis-ha-vpn"} 1785491585

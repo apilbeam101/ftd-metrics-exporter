@@ -1,0 +1,24 @@
+title = "ftd-metrics-exporter gitleaks config"
+
+# A custom config file REPLACES gitleaks' default ruleset unless it
+# explicitly extends it -- verified directly: an [allowlist]-only config
+# with no [extend] silently loads zero detection rules, so *every* scan
+# reports "no leaks found" regardless of what's actually in the tree. This
+# is the exact "test that always passes" bug class this project's own
+# reviews have flagged repeatedly; a config this narrow-looking is worth a
+# regression check (see the gitleaks CI job comment in ci.yml).
+[extend]
+useDefault = true
+
+# Two committed test fixtures are deliberately synthetic, credential-shaped
+# strings whose entire purpose is to prove the redaction/sanitization code
+# paths they exercise actually work (Stage 7/11 review findings). Scoped to
+# the exact two literal strings, not to the containing files or to test/**
+# wholesale, so a real secret accidentally added anywhere else (including a
+# new line in either of these two files) still fails the scan.
+[allowlist]
+description = "Synthetic credential-shaped test fixtures (redaction regression tests)"
+regexes = [
+  '''eyJraWQiOiIwIiwidHlwIjoiSldUIiwiYWxnIjoiUlMyNTYifQ\.eyJ2ZXIiOiIwIn0\.bLcQGFK_UDfJoeklv9wvYM5jVbM4o2sbTqb49-wOw49''',
+  '''eyJhbGciOiJIUzI1NiJ9\.LEAKED\.sig''',
+]

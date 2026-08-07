@@ -1,0 +1,48 @@
+[
+  {
+    "deviceUid": "00000000-0000-4000-8000-000000000010",
+    "deviceName": "ftd-broken-cpu",
+    "startTime": "2026-07-31T09:48:05Z",
+    "endTime": "2026-07-31T09:53:05Z",
+    "cpuHealthMetrics": { "linaUsageAvg": "not-a-number" },
+    "memoryHealthMetrics": { "linaUsageAvg": 10, "snortUsageAvg": 20, "systemUsageAvg": 30 },
+    "diskHealthMetrics": { "totalDiskUsageAvg": 5 },
+    "interfaceHealthMetrics": [
+      {
+        "interfaceName": "outside",
+        "linkStatus": "UP",
+        "operationalStatus": "UP",
+        "interfaceType": "Ethernet",
+        "interface": "Ethernet1/1"
+      }
+    ]
+  },
+  {
+    "deviceName": "ftd-missing-uid",
+    "startTime": "2026-07-31T09:48:05Z",
+    "endTime": "2026-07-31T09:53:05Z",
+    "cpuHealthMetrics": { "linaUsageAvg": 1, "snortUsageAvg": 2, "systemUsageAvg": 3 }
+  },
+  {
+    "deviceUid": "00000000-0000-4000-8000-000000000012",
+    "deviceName": "ftd-bad-timestamp",
+    "startTime": "not-a-valid-date",
+    "endTime": "2026-07-31T09:53:05Z",
+    "cpuHealthMetrics": { "linaUsageAvg": 1, "snortUsageAvg": 2, "systemUsageAvg": 3 }
+  },
+  {
+    "deviceUid": "00000000-0000-4000-8000-000000000013",
+    "deviceName": "ftd-unknown-enum",
+    "startTime": "2026-07-31T09:48:05Z",
+    "endTime": "2026-07-31T09:53:05Z",
+    "interfaceHealthMetrics": [
+      {
+        "interfaceName": "flappy",
+        "linkStatus": "FLAPPING",
+        "operationalStatus": "UP",
+        "interfaceType": "Ethernet",
+        "interface": "Ethernet1/1"
+      }
+    ]
+  }
+]

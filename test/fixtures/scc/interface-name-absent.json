@@ -1,0 +1,26 @@
+[
+  {
+    "deviceUid": "00000000-0000-4000-8000-000000000001",
+    "deviceName": "ftd-appliance-01",
+    "startTime": "2026-07-31T09:48:05Z",
+    "endTime": "2026-07-31T09:53:05Z",
+    "interfaceHealthMetrics": [
+      {
+        "linkStatus": "UP",
+        "operationalStatus": "UP",
+        "bufferUnderrunsAvg": 0,
+        "bufferOverrunsAvg": 0,
+        "dropPacketsAvg": 0,
+        "l2DecodeDropsAvg": 0,
+        "inputErrorsAvg": 0,
+        "outputErrorsAvg": 0,
+        "inputBytesAvg": 0,
+        "outputBytesAvg": 0,
+        "inputPacketSizeAvg": 0,
+        "outputPacketSizeAvg": 0,
+        "interfaceType": "Ethernet",
+        "interface": "Ethernet1/2"
+      }
+    ]
+  }
+]

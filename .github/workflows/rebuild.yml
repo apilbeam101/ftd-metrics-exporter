@@ -1,0 +1,91 @@
+name: Monthly image rebuild
+
+# Picks up base-image (node:26-slim / Debian) security patches on a
+# schedule, without cutting a source release. Only the MOVING tags
+# (major.minor, major, latest) are republished -- exact-version tags
+# (e.g. 0.1.2) are never overwritten, so "pin the exact version" remains a
+# true immutability guarantee. See SECURITY.md for the full policy and the
+# implementation plan's rationale for why monthly (not weekly) plus the
+# companion scan.yml is the right cadence.
+#
+# NOTE: scheduled workflows in a public repo are auto-disabled after 60 days
+# of no repository activity (GitHub docs) -- at this monthly cadence, two
+# missed runs is enough to hit that window. workflow_dispatch below is the
+# manual escape hatch; RELEASE_CHECKLIST.md has a quarterly reminder to
+# confirm this workflow is still enabled.
+on:
+  schedule:
+    # 04:17 UTC on the 1st -- an off-hour, off-the-hour minute, per GitHub's
+    # own advice that `schedule` events queue up and are delayed at the top
+    # of every hour.
+    - cron: "17 4 1 * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+  attestations: write
+  artifact-metadata: write
+
+env:
+  IMAGE: ghcr.io/apilbeam101/ftd-metrics-exporter
+
+jobs:
+  rebuild:
+    name: rebuild latest release from source, republish moving tags
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Resolve latest release tag
+        id: latest
+        run: |
+          tag=$(git tag --list 'v*.*.*' --sort=-v:refname | head -n1)
+          if [ -z "$tag" ]; then
+            echo "No v*.*.* tags found -- nothing to rebuild yet." >&2
+            exit 1
+          fi
+          version=${tag#v}
+          major=$(echo "$version" | cut -d. -f1)
+          minor=$(echo "$version" | cut -d. -f1-2)
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "major=$major" >> "$GITHUB_OUTPUT"
+          echo "minor=$minor" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout the release tag's source (not main)
+        run: git checkout "${{ steps.latest.outputs.tag }}"
+
+      - uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4.2.0
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Deliberately excludes the exact-version tag (e.g. 0.1.2) -- that tag
+      # must never move once published. If a future contributor adds it
+      # here, this is the one line that turns "pin the exact version" into a
+      # broken promise.
+      - id: push
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:${{ steps.latest.outputs.minor }}
+            ${{ env.IMAGE }}:${{ steps.latest.outputs.major }}
+            ${{ env.IMAGE }}:latest
+          build-args: |
+            FTD_EXPORTER_COMMIT=${{ github.sha }}
+
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true

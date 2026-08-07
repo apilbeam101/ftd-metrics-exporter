@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: ftd-metrics-exporter
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: ftd-metrics-exporter
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: ftd-metrics-exporter
+  ports:
+    - name: metrics
+      port: 10049
+      targetPort: metrics
+      protocol: TCP

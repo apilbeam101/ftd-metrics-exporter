@@ -1,0 +1,195 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write # GitHub Release
+  packages: write # push to GHCR
+  id-token: write # OIDC for attestations and npm provenance
+  attestations: write # actions/attest-build-provenance
+  artifact-metadata: write # storage record created by actions/attest-build-provenance
+
+env:
+  IMAGE: ghcr.io/apilbeam101/ftd-metrics-exporter
+
+jobs:
+  # Re-run the full gate on the tagged commit -- a tag push is not
+  # guaranteed to have gone through a PR that ran CI (e.g. a tag on an
+  # already-merged commit), so this release workflow must not trust that
+  # main was green.
+  verify:
+    name: verify (build, typecheck, test, lint)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      # The image job derives its tags from the git ref, and the npm job
+      # publishes package.json's own version -- if the two diverge (a tag
+      # pushed without bumping package.json first), the pushed image moves
+      # `:latest` while reporting a stale ftd_exporter_build_info{version=}
+      # and the npm job either fails outright or republishes an unrelated
+      # version, with `release` (needs: [image, npm]) then skipped and no
+      # GitHub Release created. Fail here, before anything is pushed.
+      - name: Verify tag matches package.json version
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          pkg=$(node -p "require('./package.json').version")
+          if [ "$tag" != "$pkg" ]; then
+            echo "Tag v$tag does not match package.json version $pkg -- bump package.json and re-tag." >&2
+            exit 1
+          fi
+      - run: npm run build
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+
+  image:
+    name: build, push, attest (GHCR)
+    needs: verify
+    runs-on: ubuntu-latest
+    outputs:
+      digest: ${{ steps.push.outputs.digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4.2.0
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Tags: exact version, minor, major, latest.
+      # docker/metadata-action's `semver` pattern derives all four from the
+      # single v-prefixed git tag.
+      - id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=raw,value=latest
+
+      - id: push
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            FTD_EXPORTER_COMMIT=${{ github.sha }}
+
+      # Provenance: which workflow/commit produced this exact digest.
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+
+      # SBOM, generated against the pushed image and attested the same way.
+      - name: Generate SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          image: ${{ env.IMAGE }}@${{ steps.push.outputs.digest }}
+          format: spdx-json
+          output-file: sbom.spdx.json
+
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+          predicate-type: https://spdx.dev/Document/v2.3
+          predicate-path: sbom.spdx.json
+
+  npm:
+    name: npm publish --provenance
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          cache: npm
+          registry-url: https://registry.npmjs.org
+      - run: npm ci
+      - run: npm run build
+      # Eyeballed once per Stage 14 testing step 6; automated here as a
+      # tripwire against the allowlist silently widening. A prior version
+      # of this step was a denylist of four known-bad prefixes -- found by
+      # review to miss a stray *.pem/*.key at the repo root (the same
+      # credential-shape gap the Stage 13B .dockerignore review already
+      # found once). scripts/check-pack-allowlist.ts inverts it: anything
+      # not explicitly covered by package.json's own "files" array fails.
+      - run: node --experimental-strip-types scripts/check-pack-allowlist.ts
+      - run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  # Discoverability mirror only (per the registry comparison in the
+  # implementation plan) -- never the documented default for any deployment
+  # path, and never allowed to fail the release: GHCR + npm above are the
+  # primary, verifiable artifacts.
+  dockerhub-mirror:
+    name: mirror to Docker Hub
+    needs: image
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Copy the already-built multi-arch manifest to Docker Hub
+        run: |
+          docker buildx imagetools create \
+            --tag docker.io/apilbeam101/ftd-metrics-exporter:${{ github.ref_name }} \
+            --tag docker.io/apilbeam101/ftd-metrics-exporter:latest \
+            ${{ env.IMAGE }}@${{ needs.image.outputs.digest }}
+
+  release:
+    name: GitHub Release
+    needs: [image, npm]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # A review found this step used --generate-notes with no --notes-file,
+      # so CHANGELOG.md's hand-maintained content was never read by any
+      # workflow -- every release shipped generic commit/PR-derived notes,
+      # and nothing enforced ever promoting [Unreleased] to a versioned
+      # heading. Failing here when no matching heading exists makes that
+      # promotion a real release gate (see docs/RELEASE_CHECKLIST.md).
+      - name: Extract this version's CHANGELOG.md section
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          section=$(awk -v ver="$version" '
+            $0 ~ "^## \\[" ver "\\]" { flag=1; next }
+            /^## \[/ { flag=0 }
+            flag { print }
+          ' CHANGELOG.md | grep -v '^\[.*\]: http')
+          if [ -z "$(echo "$section" | tr -d '[:space:]')" ]; then
+            echo "No CHANGELOG.md section found for version $version -- promote [Unreleased] to [## [$version]] before tagging." >&2
+            exit 1
+          fi
+          echo "$section" > /tmp/release-notes.md
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            --title "${{ github.ref_name }}" \
+            --notes-file /tmp/release-notes.md

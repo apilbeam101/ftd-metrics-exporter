@@ -1,0 +1,104 @@
+# HELP ftd_cpu_usage_ratio Average CPU utilization over the sample window, 0-1.
+# TYPE ftd_cpu_usage_ratio gauge
+ftd_cpu_usage_ratio{device_uid="00000000-0000-4000-8000-000000000001",device_name="ftd-appliance-01",component="lina"} 0
+ftd_cpu_usage_ratio{device_uid="00000000-0000-4000-8000-000000000001",device_name="ftd-appliance-01",component="snort"} 0
+ftd_cpu_usage_ratio{device_uid="00000000-0000-4000-8000-000000000001",device_name="ftd-appliance-01",component="system"} 0
+
+# HELP ftd_memory_usage_ratio Average memory utilization over the sample window, 0-1.
+# TYPE ftd_memory_usage_ratio gauge
+ftd_memory_usage_ratio{device_uid="00000000-0000-4000-8000-000000000001",device_name="ftd-appliance-01",component="lina"} 0
+ftd_memory_usage_ratio{device_uid="00000000-0000-4000-8000-000000000001",device_name="ftd-appliance-01",component="snort"} 0
+ftd_memory_usage_ratio{device_uid="00000000-0000-4000-8000-000000000001",device_name="ftd-appliance-01",component="system"} 0
+
+# HELP ftd_disk_usage_ratio Average disk utilization over the sample window, 0-1.
+# TYPE ftd_disk_usage_ratio gauge
+ftd_disk_usage_ratio{device_uid="00000000-0000-4000-8000-000000000001",device_name="ftd-appliance-01"} 0
+
+# HELP ftd_interface_input_bytes_avg Average inbound byte counter over the sample window.
+# TYPE ftd_interface_input_bytes_avg gauge
+ftd_interface_input_bytes_avg{device_uid="00000000-0000-4000-8000-000000000001",device_name="ftd-appliance-01",interface="Ethernet1/2",interface_name="all-zero",interface_type="Ethernet"} 0
+
+# HELP ftd_interface_output_bytes_avg Average outbound byte counter over the sample window.
+# TYPE ftd_interface_output_bytes_avg gauge
+ftd_interface_output_bytes_avg{device_uid="00000000-0000-4000-8000-000000000001",device_name="ftd-appliance-01",interface="Ethernet1/2",interface_name="all-zero",interface_type="Ethernet"} 0
+
+# HELP ftd_interface_input_packet_size_avg_bytes Average inbound packet size over the sample window.
+# TYPE ftd_interface_input_packet_size_avg_bytes gauge
+ftd_interface_input_packet_size_avg_bytes{device_uid="00000000-0000-4000-8000-000000000001",device_name="ftd-appliance-01",interface="Ethernet1/2",interface_name="all-zero",interface_type="Ethernet"} 0
+
+# HELP ftd_interface_output_packet_size_avg_bytes Average outbound packet size over the sample window.
+# TYPE ftd_interface_output_packet_size_avg_bytes gauge
+ftd_interface_output_packet_size_avg_bytes{device_uid="00000000-0000-4000-8000-000000000001",device_name="ftd-appliance-01",interface="Ethernet1/2",interface_name="all-zero",interface_type="Ethernet"} 0
+
+# HELP ftd_interface_input_errors_avg Average inbound error count over the sample window.
+# TYPE ftd_interface_input_errors_avg gauge
+ftd_interface_input_errors_avg{device_uid="00000000-0000-4000-8000-000000000001",device_name="ftd-appliance-01",interface="Ethernet1/2",interface_name="all-zero",interface_type="Ethernet"} 0
+
+# HELP ftd_interface_output_errors_avg Average outbound error count over the sample window.
+# TYPE ftd_interface_output_errors_avg gauge
+ftd_interface_output_errors_avg{device_uid="00000000-0000-4000-8000-000000000001",device_name="ftd-appliance-01",interface="Ethernet1/2",interface_name="all-zero",interface_type="Ethernet"} 0
+
+# HELP ftd_interface_drop_packets_avg Average dropped packet count over the sample window.
+# TYPE ftd_interface_drop_packets_avg gauge
+ftd_interface_drop_packets_avg{device_uid="00000000-0000-4000-8000-000000000001",device_name="ftd-appliance-01",interface="Ethernet1/2",interface_name="all-zero",interface_type="Ethernet"} 0
+
+# HELP ftd_interface_buffer_overruns_avg Average buffer overrun count over the sample window.
+# TYPE ftd_interface_buffer_overruns_avg gauge
+ftd_interface_buffer_overruns_avg{device_uid="00000000-0000-4000-8000-000000000001",device_name="ftd-appliance-01",interface="Ethernet1/2",interface_name="all-zero",interface_type="Ethernet"} 0
+
+# HELP ftd_interface_buffer_underruns_avg Average buffer underrun count over the sample window.
+# TYPE ftd_interface_buffer_underruns_avg gauge
+ftd_interface_buffer_underruns_avg{device_uid="00000000-0000-4000-8000-000000000001",device_name="ftd-appliance-01",interface="Ethernet1/2",interface_name="all-zero",interface_type="Ethernet"} 0
+
+# HELP ftd_interface_l2_decode_drops_avg Average L2 decode drop count over the sample window.
+# TYPE ftd_interface_l2_decode_drops_avg gauge
+ftd_interface_l2_decode_drops_avg{device_uid="00000000-0000-4000-8000-000000000001",device_name="ftd-appliance-01",interface="Ethernet1/2",interface_name="all-zero",interface_type="Ethernet"} 0
+
+# HELP ftd_interface_link_up 1 if the interface link is up, 0 if down. Omitted when link status is unrecognized.
+# TYPE ftd_interface_link_up gauge
+ftd_interface_link_up{device_uid="00000000-0000-4000-8000-000000000001",device_name="ftd-appliance-01",interface="Ethernet1/2",interface_name="all-zero",interface_type="Ethernet"} 1
+
+# HELP ftd_interface_operational_up 1 if the interface is operationally up, 0 if down. Omitted when operational status is unrecognized.
+# TYPE ftd_interface_operational_up gauge
+ftd_interface_operational_up{device_uid="00000000-0000-4000-8000-000000000001",device_name="ftd-appliance-01",interface="Ethernet1/2",interface_name="all-zero",interface_type="Ethernet"} 1
+
+# HELP ftd_interface_duplex_info Always 1. Informational; duplex_mode carries the reported value.
+# TYPE ftd_interface_duplex_info gauge
+
+# HELP ftd_chassis_fan_rpm Chassis fan speed in RPM.
+# TYPE ftd_chassis_fan_rpm gauge
+
+# HELP ftd_chassis_psu_fan_up 1 if the PSU fan status is up, 0 if down. Omitted when unrecognized.
+# TYPE ftd_chassis_psu_fan_up gauge
+
+# HELP ftd_chassis_psu_input_up 1 if the PSU input status is up, 0 if down. Omitted when unrecognized.
+# TYPE ftd_chassis_psu_input_up gauge
+
+# HELP ftd_chassis_psu_output_up 1 if the PSU output status is up, 0 if down. Omitted when unrecognized.
+# TYPE ftd_chassis_psu_output_up gauge
+
+# HELP ftd_ha_node_status State set: exactly one status label is 1 for a given device.
+# TYPE ftd_ha_node_status gauge
+
+# HELP ftd_ha_node_info Always 1. Informational; node_type carries the HA role.
+# TYPE ftd_ha_node_info gauge
+
+# HELP ftd_ravpn_sessions_active_avg Average active RA VPN session count over the sample window.
+# TYPE ftd_ravpn_sessions_active_avg gauge
+
+# HELP ftd_ravpn_sessions_inactive_avg Average inactive RA VPN session count over the sample window.
+# TYPE ftd_ravpn_sessions_inactive_avg gauge
+
+# HELP ftd_ravpn_sessions_peak_concurrent Peak concurrent RA VPN session count over the sample window.
+# TYPE ftd_ravpn_sessions_peak_concurrent gauge
+
+# HELP ftd_s2s_tunnel_state State set: exactly one state label is 1 for a given tunnel.
+# TYPE ftd_s2s_tunnel_state gauge
+
+# HELP ftd_health_window_start_timestamp_seconds Start of the averaging window this snapshot describes, unix seconds.
+# TYPE ftd_health_window_start_timestamp_seconds gauge
+ftd_health_window_start_timestamp_seconds{device_uid="00000000-0000-4000-8000-000000000001",device_name="ftd-appliance-01"} 1785491285
+
+# HELP ftd_health_window_end_timestamp_seconds End of the averaging window this snapshot describes, unix seconds.
+# TYPE ftd_health_window_end_timestamp_seconds gauge
+ftd_health_window_end_timestamp_seconds{device_uid="00000000-0000-4000-8000-000000000001",device_name="ftd-appliance-01"} 1785491585

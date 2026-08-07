@@ -1,0 +1,28 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      npm-minor-patch:
+        update-types: [minor, patch]
+
+  # Tracks the `FROM node:26` / `FROM node:26-slim` lines in Dockerfile.
+  # Post-v1 (per the implementation plan's CalVer transition), these PRs
+  # become the routine "bump node to 26.x-slim" release content.
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+
+  # Actions are pinned to commit SHAs specifically so a compromised tag
+  # can't silently change what a workflow runs -- this is what keeps those
+  # pins current without hand-tracking upstream releases.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions-minor-patch:
+        update-types: [minor, patch]

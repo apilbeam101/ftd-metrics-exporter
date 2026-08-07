@@ -1,0 +1,307 @@
+{
+  "links": {
+    "self": "https://fmc.example.internal/api/fmc_config/v1/domain/00000000-0000-4000-8000-000000000002/devices/devicerecords?offset=0&limit=25&expanded=true"
+  },
+  "items": [
+    {
+      "deploymentStatus": "DEPLOYMENT_PENDING",
+      "id": "00000000-0000-4000-8000-000000000003",
+      "type": "Device",
+      "links": {
+        "self": "https://fmc.example.internal/api/fmc_config/v1/domain/00000000-0000-4000-8000-000000000002/devices/devicerecords/00000000-0000-4000-8000-000000000003"
+      },
+      "name": "ftd1.lab.example",
+      "description": "NOT SUPPORTED",
+      "model": "Cisco Secure Firewall Threat Defense for VMware",
+      "modelId": "A",
+      "modelNumber": "75",
+      "modelType": "Sensor",
+      "healthStatus": "green",
+      "healthMessage": "FXOS health check passed.",
+      "sw_version": "10.0.0",
+      "healthPolicy": {
+        "id": "00000000-0000-4000-8000-000000000004",
+        "name": "Device Health Policy",
+        "type": "HealthPolicy"
+      },
+      "accessPolicy": {
+        "name": "Attribute Based Firewall Policy",
+        "id": "00000000-0000-4000-8000-000000000005",
+        "type": "AccessPolicy"
+      },
+      "advanced": {
+        "enableOGS": true
+      },
+      "hostName": "ftd1-mgmt.lab.example",
+      "license_caps": [
+        "SECURE_CLIENT_PREMIER",
+        "ESSENTIALS",
+        "MALWARE_DEFENSE",
+        "IPS",
+        "URL"
+      ],
+      "performanceTier": "FTDv5",
+      "keepLocalEvents": false,
+      "prohibitPacketTransfer": false,
+      "isConnected": true,
+      "ftdMode": "ROUTED",
+      "analyticsOnly": false,
+      "metadata": {
+        "readOnly": {
+          "state": false
+        },
+        "inventoryData": {
+          "cpuCores": "1 CPU (4 cores)",
+          "cpuType": "CPU Xeon 4100/6100/8100 series 3000 MHz",
+          "memoryInMB": "8192 MB RAM"
+        },
+        "deviceSerialNumber": "SNPLACEHOLDER0A",
+        "domain": {
+          "name": "Global",
+          "id": "00000000-0000-4000-8000-000000000002",
+          "type": "Domain"
+        },
+        "containerDetails": {
+          "id": "00000000-0000-4000-8000-000000000006",
+          "type": "DeviceHAPair",
+          "name": "ftd-ha.lab.example",
+          "role": "PRIMARY",
+          "status": "Active"
+        },
+        "isPartOfContainer": true,
+        "isMultiInstance": false,
+        "snortVersion": "3.9.3.1-61",
+        "vdbVersion": "Build 428 - 2026-04-24 18:36:02.0",
+        "lspVersion": "lsp-rel-20260729-2041",
+        "clusterBootstrapSupported": true,
+        "universalZeroTrustSupported": false,
+        "coreProfile": "Default"
+      },
+      "snortEngine": "SNORT3",
+      "isMCDManaged": false,
+      "managementState": "MANAGED"
+    },
+    {
+      "deploymentStatus": "DEPLOYMENT_PENDING",
+      "id": "00000000-0000-4000-8000-000000000007",
+      "type": "Device",
+      "links": {
+        "self": "https://fmc.example.internal/api/fmc_config/v1/domain/00000000-0000-4000-8000-000000000002/devices/devicerecords/00000000-0000-4000-8000-000000000007"
+      },
+      "name": "ftd-spoke-1",
+      "description": "NOT SUPPORTED",
+      "model": "Cisco Secure Firewall Threat Defense for VMware",
+      "modelId": "A",
+      "modelNumber": "75",
+      "modelType": "Sensor",
+      "healthStatus": "disabled",
+      "healthMessage": "Appliance unreachable",
+      "sw_version": "10.0.0",
+      "healthPolicy": {
+        "id": "00000000-0000-4000-8000-000000000004",
+        "name": "Device Health Policy",
+        "type": "HealthPolicy"
+      },
+      "accessPolicy": {
+        "name": "SDWAN Firewall Spokes",
+        "id": "00000000-0000-4000-8000-000000000008",
+        "type": "AccessPolicy"
+      },
+      "advanced": {
+        "enableOGS": true
+      },
+      "hostName": "ftd-spoke-1-mgmt.lab.example",
+      "license_caps": [
+        "ESSENTIALS",
+        "MALWARE_DEFENSE",
+        "IPS",
+        "URL"
+      ],
+      "performanceTier": "FTDv5",
+      "keepLocalEvents": false,
+      "prohibitPacketTransfer": false,
+      "isConnected": false,
+      "ftdMode": "ROUTED",
+      "analyticsOnly": false,
+      "metadata": {
+        "readOnly": {
+          "state": false
+        },
+        "inventoryData": {
+          "cpuCores": "1 CPU (4 cores)",
+          "cpuType": "CPU Xeon 4100/6100/8100 series 3000 MHz",
+          "memoryInMB": "8192 MB RAM"
+        },
+        "deviceSerialNumber": "SNPLACEHOLDER0B",
+        "domain": {
+          "name": "Global",
+          "id": "00000000-0000-4000-8000-000000000002",
+          "type": "Domain"
+        },
+        "isMultiInstance": false,
+        "snortVersion": "3.9.3.1-61",
+        "vdbVersion": "Build 428 - 2026-04-24 18:36:02.0",
+        "lspVersion": "lsp-rel-20260729-2041",
+        "clusterBootstrapSupported": true,
+        "universalZeroTrustSupported": false,
+        "coreProfile": "Default"
+      },
+      "snortEngine": "SNORT3",
+      "isMCDManaged": false,
+      "managementState": "MANAGED"
+    },
+    {
+      "deploymentStatus": "DEPLOYMENT_PENDING",
+      "id": "00000000-0000-4000-8000-000000000009",
+      "type": "Device",
+      "links": {
+        "self": "https://fmc.example.internal/api/fmc_config/v1/domain/00000000-0000-4000-8000-000000000002/devices/devicerecords/00000000-0000-4000-8000-000000000009"
+      },
+      "name": "ftd-spoke-2",
+      "description": "NOT SUPPORTED",
+      "model": "Cisco Secure Firewall Threat Defense for VMware",
+      "modelId": "A",
+      "modelNumber": "75",
+      "modelType": "Sensor",
+      "healthStatus": "disabled",
+      "healthMessage": "Appliance unreachable",
+      "sw_version": "10.0.0",
+      "healthPolicy": {
+        "id": "00000000-0000-4000-8000-000000000004",
+        "name": "Device Health Policy",
+        "type": "HealthPolicy"
+      },
+      "accessPolicy": {
+        "name": "SDWAN Firewall Spokes",
+        "id": "00000000-0000-4000-8000-000000000008",
+        "type": "AccessPolicy"
+      },
+      "advanced": {
+        "enableOGS": true
+      },
+      "hostName": "ftd-spoke-2-mgmt.lab.example",
+      "license_caps": [
+        "ESSENTIALS",
+        "MALWARE_DEFENSE",
+        "IPS",
+        "URL"
+      ],
+      "performanceTier": "FTDv5",
+      "keepLocalEvents": false,
+      "prohibitPacketTransfer": false,
+      "isConnected": false,
+      "ftdMode": "ROUTED",
+      "analyticsOnly": false,
+      "metadata": {
+        "readOnly": {
+          "state": false
+        },
+        "inventoryData": {
+          "cpuCores": "1 CPU (4 cores)",
+          "cpuType": "CPU Xeon 4100/6100/8100 series 3000 MHz",
+          "memoryInMB": "8192 MB RAM"
+        },
+        "deviceSerialNumber": "SNPLACEHOLDER0C",
+        "domain": {
+          "name": "Global",
+          "id": "00000000-0000-4000-8000-000000000002",
+          "type": "Domain"
+        },
+        "isMultiInstance": false,
+        "snortVersion": "3.9.3.1-61",
+        "vdbVersion": "Build 428 - 2026-04-24 18:36:02.0",
+        "lspVersion": "lsp-rel-20260729-2041",
+        "clusterBootstrapSupported": true,
+        "universalZeroTrustSupported": false,
+        "coreProfile": "Default"
+      },
+      "snortEngine": "SNORT3",
+      "isMCDManaged": false,
+      "managementState": "MANAGED"
+    },
+    {
+      "deploymentStatus": "DEPLOYMENT_PENDING",
+      "id": "00000000-0000-4000-8000-00000000000a",
+      "type": "Device",
+      "links": {
+        "self": "https://fmc.example.internal/api/fmc_config/v1/domain/00000000-0000-4000-8000-000000000002/devices/devicerecords/00000000-0000-4000-8000-00000000000a"
+      },
+      "name": "ftd2.lab.example",
+      "description": "NOT SUPPORTED",
+      "model": "Cisco Secure Firewall Threat Defense for VMware",
+      "modelId": "A",
+      "modelNumber": "75",
+      "modelType": "Sensor",
+      "healthStatus": "disabled",
+      "healthMessage": "FXOS health check passed.",
+      "sw_version": "10.0.0",
+      "healthPolicy": {
+        "id": "00000000-0000-4000-8000-000000000004",
+        "name": "Device Health Policy",
+        "type": "HealthPolicy"
+      },
+      "accessPolicy": {
+        "name": "Attribute Based Firewall Policy",
+        "id": "00000000-0000-4000-8000-000000000005",
+        "type": "AccessPolicy"
+      },
+      "advanced": {
+        "enableOGS": true
+      },
+      "hostName": "ftd2-mgmt.lab.example",
+      "license_caps": [
+        "SECURE_CLIENT_PREMIER",
+        "ESSENTIALS",
+        "MALWARE_DEFENSE",
+        "IPS",
+        "URL"
+      ],
+      "performanceTier": "FTDv5",
+      "keepLocalEvents": false,
+      "prohibitPacketTransfer": false,
+      "isConnected": true,
+      "ftdMode": "ROUTED",
+      "analyticsOnly": false,
+      "metadata": {
+        "readOnly": {
+          "state": false
+        },
+        "inventoryData": {
+          "cpuCores": "1 CPU (4 cores)",
+          "cpuType": "CPU Xeon 4100/6100/8100 series 3000 MHz",
+          "memoryInMB": "8192 MB RAM"
+        },
+        "deviceSerialNumber": "SNPLACEHOLDER0D",
+        "domain": {
+          "name": "Global",
+          "id": "00000000-0000-4000-8000-000000000002",
+          "type": "Domain"
+        },
+        "containerDetails": {
+          "id": "00000000-0000-4000-8000-000000000006",
+          "type": "DeviceHAPair",
+          "name": "ftd-ha.lab.example",
+          "role": "SECONDARY",
+          "status": "Failed"
+        },
+        "isPartOfContainer": true,
+        "isMultiInstance": false,
+        "snortVersion": "3.9.3.1-61",
+        "vdbVersion": "Build 428 - 2026-04-24 18:36:02.0",
+        "lspVersion": "lsp-rel-20260729-2041",
+        "clusterBootstrapSupported": true,
+        "universalZeroTrustSupported": false,
+        "coreProfile": "Default"
+      },
+      "snortEngine": "SNORT3",
+      "isMCDManaged": false,
+      "managementState": "MANAGED"
+    }
+  ],
+  "paging": {
+    "offset": 0,
+    "limit": 25,
+    "count": 4,
+    "pages": 1
+  }
+}

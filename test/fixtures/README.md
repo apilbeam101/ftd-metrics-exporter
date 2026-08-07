@@ -1,0 +1,41 @@
+# Test fixtures
+
+Every fixture below is either **live-verified** (derived from a real, sanitized upstream capture) or **synthetic** (hand- or script-authored to exercise a case no live capture demonstrates). Fixtures whose upstream field names are unconfirmed on real hardware/configuration are additionally marked **provisional** and carry a `provisional-` filename prefix — do not treat them as evidence of real field names.
+
+Fixtures are regenerated from raw captures in the gitignored `.scratch/` directory via `node --experimental-strip-types scripts/sanitize-fixtures.ts`. That tool and `.scratch/` are maintainer-only (offline, not run in CI, not shipped) — **if you're an external contributor with hardware/configuration we don't have access to** (chassis-based FTD, an HA pair, RA VPN, S2S tunnels), you don't need either: see [CONTRIBUTING.md's fixture-contribution workflow](../CONTRIBUTING.md#contributing-sanitized-fixtures-fmc-schema-unknowns) for the `--dump-raw`-based path instead. Never commit anything from `.scratch/` directly — see the sanitization rules below.
+
+## SCC (`scc/`)
+
+| Fixture | Status | Purpose |
+|---|---|---|
+| `full-live.json` | live-verified | Primary SCC fixture: 1 device (FTD 1010 class appliance), 9 interfaces, CPU/MEM/DISK/INTERFACE populated. Also *is* the "all conditional groups absent" case — chassis/HA/RA VPN/S2S keys are confirmed absent on this real appliance. |
+| `cpu-group-absent.json` | live-verified | Recapture ~15 min after disabling the CPU health-policy module in the SCC UI. `cpuHealthMetrics` key is gone; `memoryHealthMetrics`/`diskHealthMetrics`/`interfaceHealthMetrics` are intact. Proves per-group (not per-device) policy-gated absence. |
+| `interface-name-absent.json` | derived from live data | An interface entry with no `interfaceName` key, taken from the shape of `full-live.json`'s unnamed interfaces. Proves the fallback-to-hardware-id behavior. |
+| `zero-values.json` | derived from live data | Genuine `0` readings for CPU/memory/disk and an all-zero interface. Guards against a truthiness-bug class where a real `0` reading is mistaken for absent data. |
+| `malformed.json` | synthetic | Four deliberately broken devices: non-numeric CPU field, missing `deviceUid`, unparseable `startTime`, unrecognized `linkStatus` enum (`"FLAPPING"`). Exercises per-device/per-group skip behavior and the "unknown enum → counter" path. |
+| `s2s-1000-tunnels.json` | synthetic, script-generated | 1000 S2S tunnel entries on one device. Worst-case cardinality fixture. |
+| `provisional-all-groups-present.json` | **synthetic / provisional** | Chassis + HA + RA VPN + S2S tunnels all populated on one device, using Appendix B's documented (never-observed-populated) field names. The only way to exercise these code paths pre-1.0. **Expect this to be wrong** — replace wholesale the first time a real `--dump-raw` capture of any of these groups arrives. |
+
+## FMC (`fmc/`)
+
+| Fixture | Status | Purpose |
+|---|---|---|
+| `cpu.json`, `mem.json`, `disk-stats.json` | live-verified | Single-device, single-family `items[]` captures from the lab FMC (v10.0.0, FTDv). Confirms field names are identical to SCC's for these three families. |
+| `interface.json` | live-verified | The naming-divergence fixture: `interfaceHealthMetricsList` (not SCC's `interfaceHealthMetrics`), `currentLinkStatus`/`currentOperationalStatus` (not SCC's `linkStatus`/`operationalStatus`), `duplexMode` populated on every interface. 9 interfaces including `management`, which is missing `duplexMode`. |
+| `empty-family.json` | live-verified | `CHASSIS_STATS` against an FTDv (no chassis hardware): `{"paging":{"count":0}}`, no `items` key. Capability-based absence — 200 with an empty result set, not an error and not zeros. |
+| `device-not-connected.json` | live-verified | A per-device `INTERFACE` request against an unreachable spoke device: `{"error":{"category":"FRAMEWORK","messages":[{"description":"Device not connected."}]}}`. Drives the partial-snapshot/per-device-failure-isolation behavior. **Body only** — the capture tool recorded the response body, not the HTTP status line; mapper/client tests should assert on the error body shape, not assume a specific status code from this fixture. |
+| `unsupported-device.json` | live-verified | `fpinterfacestatistics` against an FTDv: `"Unsupported device"` error, independent of health-policy state. Evidence for which FMC interface source is authoritative — still an open question. **Body only**, same caveat as above. |
+| `devicerecords-page1.json` | live-verified | Single-page `devicerecords?expanded=true` capture, 4 real lab devices (one appliance, two spokes, one HA-paired peer), reflecting `isConnected`, `healthStatus`, and full device metadata. |
+| `paginated-40-devices-page1.json`, `paginated-40-devices-page2.json` | synthetic, script-generated | A 40-device inventory split across two 25-item pages with no paging headers. Proves the discovery offset-loop does not truncate at the default page size — a single-request implementation would see only the 25 devices in page 1. |
+| `auth-headers.json` | live-verified (values replaced) | Header set from a real `POST .../auth/generatetoken`, which returns `204` with no body — the `{status, headers}` envelope in this file is a synthetic wrapper around real header names/shape, not a raw capture: `X-auth-access-token`, `X-auth-refresh-token`, `DOMAIN_UUID`, `DOMAINS`. Token values are placeholders. |
+| `provisional-chassis-stats.json` | **synthetic / provisional** | `CHASSIS_STATS` populated via the real, verified `aggregatemetrics` `items[]` wrapper, using documented (never-observed-populated-on-FMC) `chassisStatsHealthMetrics` field names. **Expect the field names to be wrong** — replace via `--dump-raw` once a real capture against chassis-based FMC-managed hardware exists. |
+
+**No FMC fixtures exist for HA/RA VPN/S2S VPN.** Unlike `CHASSIS_STATS`, these are not `aggregatemetrics` metric families at all — they live on entirely separate, as-yet-undesigned endpoints (`/devicehapairs/ftddevicehapairs`, `/health/ravpngateways`, `/health/tunnelstatuses`/`tunnelsummaries`), which is why they're deferred to v1.1. A fixture for an endpoint with no corresponding schema type would document a guess about *which API this exporter calls*, not just a guess about field names — a strictly worse kind of provisional data. Add these only once that endpoint design exists.
+
+## Sanitization rules (for anyone adding a new fixture from a raw capture)
+
+1. **Sanitize identities, not structure.** Replace device names, hostnames, IP addresses, domain UUIDs, and device UUIDs. Never rename interface hardware ids (`Ethernet1/1`, `GigabitEthernet0/0`), types, enum values, or counter values — the mappers' correctness depends on those being real-shaped.
+2. **Sanitize recursively.** Real identifiers can be nested inside `links.self` query strings, not just top-level fields. `scripts/sanitize-fixtures.ts` walks the entire object tree; if you add a fixture by hand instead, do the same.
+3. **Use one `Sanitizer` instance across a batch** of files derived from the same capture session, so the same real UUID maps to the same placeholder everywhere it appears (see `src/util/sanitize.ts`).
+4. **Verify with a grep**, not by eye — the fixture-sanitization guard test (`test/unit/fixture-sanitization.test.ts`) does this automatically for every commit, but re-run it locally after adding anything new.
+5. **Never commit anything from `.scratch/` directly.** It is gitignored specifically because it contains live, real captures.

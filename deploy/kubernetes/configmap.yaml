@@ -1,0 +1,51 @@
+# Non-sensitive configuration only -- credentials live in
+# secret.example.yaml instead. Copy this alongside a populated Secret; both
+# are consumed via envFrom in deployment.yaml, so the container's environment
+# ends up identical in shape to the standalone/.env and Docker paths.
+#
+# Uncomment only the block matching BACKEND_TYPE below; setting both blocks'
+# variables produces the same "wrong block was edited" startup warning as
+# example.env.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ftd-metrics-exporter-config
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: ftd-metrics-exporter
+data:
+  # --- Core ---
+  BACKEND_TYPE: "scc" # or "fmc"
+  # If you change this, you MUST also update deployment.yaml's containerPort,
+  # both probes' port, the prometheus.io/port annotation, and service.yaml's
+  # port/targetPort -- none of those read this value, they hardcode 10049.
+  # Verified: changing only this key leaves the probes pointed at the old
+  # port, producing a permanent liveness-probe-failure restart loop.
+  METRICS_PORT: "10049"
+  METRICS_BIND_ADDRESS: "0.0.0.0"
+  # 60s is safe for BACKEND_TYPE=scc (30s floor enforced at startup) and a
+  # reasonable default for BACKEND_TYPE=fmc; raise it for fleets above ~40
+  # FMC devices.
+  POLL_INTERVAL_SECONDS: "60"
+  LOG_LEVEL: "info"
+  LOG_FORMAT: "json"
+  REQUEST_TIMEOUT_SECONDS: "30"
+  ENABLE_DEFAULT_METRICS: "true"
+
+  # --- SCC backend (BACKEND_TYPE=scc) ---
+  SCC_BASE_URL: "https://api.us.security.cisco.com/firewall" # pick your region
+  SCC_FMC_UID: "" # UID of the cdFMC whose managed devices are polled
+  SCC_TIME_RANGE: "5m"
+
+  # --- Standalone on-prem FMC backend (BACKEND_TYPE=fmc) ---
+  FMC_HOST: ""
+  FMC_DOMAIN_UUID: ""
+  # Path inside the container where the CA bundle volume (see deployment.yaml)
+  # is mounted. Leave unset if FMC's certificate is already trusted, or if
+  # you're using FMC_TLS_INSECURE_SKIP_VERIFY (lab/test only -- never both).
+  FMC_CA_BUNDLE_PATH: ""
+  FMC_TLS_INSECURE_SKIP_VERIFY: "false"
+  FMC_MAX_CONCURRENT_REQUESTS: "5"
+  FMC_DISCOVERY_INTERVAL_SECONDS: "900"
+  FMC_METRIC_FAMILIES: "CPU,MEM,INTERFACE,DISK_STATS,CHASSIS_STATS"
+  FMC_TIME_RANGE: "5m"

@@ -1,0 +1,86 @@
+name: Monthly image vulnerability scan
+
+# Scans the published `latest` tag (kept current by rebuild.yml, which runs
+# earlier the same day) and surfaces findings via the Security tab. This is
+# the load-bearing half of the monthly cadence described in SECURITY.md and
+# the implementation plan: a rebuild that silently stops (see the 60-day
+# scheduled-workflow auto-disable note in rebuild.yml) is caught by this
+# scan reporting a stale/vulnerable image, rather than by nothing at all.
+on:
+  schedule:
+    # A few hours after rebuild.yml's 04:17 UTC run, so this scans what was
+    # just published rather than racing it.
+    - cron: "0 9 1 * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  security-events: write
+  packages: read
+  issues: write
+
+env:
+  IMAGE: ghcr.io/apilbeam101/ftd-metrics-exporter:latest
+
+jobs:
+  scan:
+    name: trivy scan + SARIF upload
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # DB cache per trivy-action's own guidance, to avoid rate limiting on
+      # the ghcr.io-hosted vulnerability database.
+      - name: Restore Trivy DB cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .trivy-cache
+          key: trivy-db-${{ github.run_id }}
+          restore-keys: trivy-db-
+
+      - name: Scan published image
+        id: scan
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE }}
+          format: sarif
+          output: trivy-results.sarif
+          severity: HIGH,CRITICAL
+          exit-code: "0" # report, don't fail the workflow -- this is a monitoring job, not a gate
+          cache-dir: .trivy-cache
+
+      - uses: github/codeql-action/upload-sarif@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
+        with:
+          sarif_file: trivy-results.sarif
+
+      - name: Count high/critical findings
+        id: count
+        run: |
+          count=$(node -e "
+            const sarif = JSON.parse(require('node:fs').readFileSync('trivy-results.sarif'));
+            const results = sarif.runs?.[0]?.results ?? [];
+            console.log(results.length);
+          ")
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+
+      - name: Open or update tracking issue on new findings
+        if: steps.count.outputs.count != '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          COUNT: ${{ steps.count.outputs.count }}
+        run: |
+          # gh issue create --label fails outright on a label that doesn't
+          # exist yet, and nothing else in this repo creates it -- bootstrap
+          # idempotently (--force makes a second run a no-op) rather than
+          # assuming a maintainer created it by hand before the first run.
+          gh label create base-image-cve --description "Base image CVE tracking (scan.yml)" --color b60205 --force
+          title="Monthly scan: $COUNT high/critical finding(s) in the published image"
+          existing=$(gh issue list --label base-image-cve --state open --json number --jq '.[0].number')
+          body="Trivy found $COUNT high/critical finding(s) in \`${{ env.IMAGE }}\` on $(date -u +%Y-%m-%d). See the Security tab for details, or the workflow run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}.
+
+          Per SECURITY.md, these are addressed by the next monthly rebuild unless a source-level fix is needed sooner."
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body "$body"
+          else
+            gh issue create --title "$title" --body "$body" --label base-image-cve
+          fi

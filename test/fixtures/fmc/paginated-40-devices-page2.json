@@ -1,0 +1,103 @@
+{
+  "links": {
+    "self": "https://fmc.example.internal/api/fmc_config/v1/domain/00000000-0000-4000-8000-000000000002/devices/devicerecords?offset=25&limit=25&expanded=true"
+  },
+  "items": [
+    {
+      "id": "00000000-0000-4000-9000-00000000001a",
+      "name": "ftd-synthetic-26",
+      "type": "Device",
+      "isConnected": true
+    },
+    {
+      "id": "00000000-0000-4000-9000-00000000001b",
+      "name": "ftd-synthetic-27",
+      "type": "Device",
+      "isConnected": true
+    },
+    {
+      "id": "00000000-0000-4000-9000-00000000001c",
+      "name": "ftd-synthetic-28",
+      "type": "Device",
+      "isConnected": true
+    },
+    {
+      "id": "00000000-0000-4000-9000-00000000001d",
+      "name": "ftd-synthetic-29",
+      "type": "Device",
+      "isConnected": true
+    },
+    {
+      "id": "00000000-0000-4000-9000-00000000001e",
+      "name": "ftd-synthetic-30",
+      "type": "Device",
+      "isConnected": true
+    },
+    {
+      "id": "00000000-0000-4000-9000-00000000001f",
+      "name": "ftd-synthetic-31",
+      "type": "Device",
+      "isConnected": true
+    },
+    {
+      "id": "00000000-0000-4000-9000-000000000020",
+      "name": "ftd-synthetic-32",
+      "type": "Device",
+      "isConnected": true
+    },
+    {
+      "id": "00000000-0000-4000-9000-000000000021",
+      "name": "ftd-synthetic-33",
+      "type": "Device",
+      "isConnected": true
+    },
+    {
+      "id": "00000000-0000-4000-9000-000000000022",
+      "name": "ftd-synthetic-34",
+      "type": "Device",
+      "isConnected": true
+    },
+    {
+      "id": "00000000-0000-4000-9000-000000000023",
+      "name": "ftd-synthetic-35",
+      "type": "Device",
+      "isConnected": true
+    },
+    {
+      "id": "00000000-0000-4000-9000-000000000024",
+      "name": "ftd-synthetic-36",
+      "type": "Device",
+      "isConnected": true
+    },
+    {
+      "id": "00000000-0000-4000-9000-000000000025",
+      "name": "ftd-synthetic-37",
+      "type": "Device",
+      "isConnected": true
+    },
+    {
+      "id": "00000000-0000-4000-9000-000000000026",
+      "name": "ftd-synthetic-38",
+      "type": "Device",
+      "isConnected": true
+    },
+    {
+      "id": "00000000-0000-4000-9000-000000000027",
+      "name": "ftd-synthetic-39",
+      "type": "Device",
+      "isConnected": true
+    },
+    {
+      "id": "00000000-0000-4000-9000-000000000028",
+      "name": "ftd-synthetic-40",
+      "type": "Device",
+      "isConnected": true
+    }
+  ],
+  "paging": {
+    "offset": 25,
+    "limit": 25,
+    "count": 40,
+    "pages": 2
+  }
+}

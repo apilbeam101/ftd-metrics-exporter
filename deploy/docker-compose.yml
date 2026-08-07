@@ -1,0 +1,23 @@
+services:
+  ftd-metrics-exporter:
+    # Pulls the published image -- pin at least the minor tag in production
+    # (e.g. 0.2), or a digest for the strongest guarantee. `latest` is
+    # provided but not recommended.
+    image: ghcr.io/apilbeam101/ftd-metrics-exporter:0.1
+    # Contributors/air-gapped: build from source instead of pulling --
+    # comment out `image:` above and uncomment the line below.
+    # build: ..
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    ports:
+      - "10049:10049"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    # Uncomment to mount an FMC CA bundle (the one case env vars alone
+    # cannot cover — set FMC_CA_BUNDLE_PATH in .env to the in-container path):
+    # volumes:
+    #   - /host/ca.pem:/etc/ftd-exporter/ca.pem:ro

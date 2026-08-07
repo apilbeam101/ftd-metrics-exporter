@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.example.ftd-metrics-exporter</string>
+
+	<!-- Adjust to /opt/homebrew/bin/node on Apple-silicon Homebrew installs. -->
+	<key>ProgramArguments</key>
+	<array>
+		<string>/usr/local/bin/node</string>
+		<string>/opt/ftd-metrics-exporter/dist/index.js</string>
+	</array>
+
+	<key>WorkingDirectory</key>
+	<string>/opt/ftd-metrics-exporter</string>
+
+	<!-- No StandardOutPath/StandardErrorPath: the exporter logs JSON to stdout
+	     and writes no files, matching the systemd unit's empty
+	     ReadWritePaths. launchd routes stdout/stderr to the unified log;
+	     read it with: log stream --predicate 'process == "node"' --info -->
+
+	<!-- Restart on crash but not after a clean exit (SIGTERM shutdown exits
+	     0), so launchctl stop/unload isn't immediately undone. -->
+	<key>KeepAlive</key>
+	<dict>
+		<key>SuccessfulExit</key>
+		<false/>
+	</dict>
+
+	<key>RunAtLoad</key>
+	<true/>
+</dict>
+</plist>

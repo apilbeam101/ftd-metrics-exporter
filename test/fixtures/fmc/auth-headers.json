@@ -1,0 +1,10 @@
+{
+  "_comment": "Header set recorded from a live POST /api/fmc_platform/v1/auth/generatetoken (204, no body) against the lab FMC, per DESIGN.md Appendix C. Token values replaced with placeholders; header names and shape are real.",
+  "status": 204,
+  "headers": {
+    "X-auth-access-token": "PLACEHOLDER-ACCESS-TOKEN",
+    "X-auth-refresh-token": "PLACEHOLDER-REFRESH-TOKEN",
+    "DOMAIN_UUID": "00000000-0000-4000-8000-000000000002",
+    "DOMAINS": "[{\"name\":\"Global\",\"uuid\":\"00000000-0000-4000-8000-000000000002\"}]"
+  }
+}

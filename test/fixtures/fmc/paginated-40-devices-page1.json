@@ -1,0 +1,163 @@
+{
+  "links": {
+    "self": "https://fmc.example.internal/api/fmc_config/v1/domain/00000000-0000-4000-8000-000000000002/devices/devicerecords?offset=0&limit=25&expanded=true"
+  },
+  "items": [
+    {
+      "id": "00000000-0000-4000-9000-000000000001",
+      "name": "ftd-synthetic-1",
+      "type": "Device",
+      "isConnected": true
+    },
+    {
+      "id": "00000000-0000-4000-9000-000000000002",
+      "name": "ftd-synthetic-2",
+      "type": "Device",
+      "isConnected": true
+    },
+    {
+      "id": "00000000-0000-4000-9000-000000000003",
+      "name": "ftd-synthetic-3",
+      "type": "Device",
+      "isConnected": true
+    },
+    {
+      "id": "00000000-0000-4000-9000-000000000004",
+      "name": "ftd-synthetic-4",
+      "type": "Device",
+      "isConnected": true
+    },
+    {
+      "id": "00000000-0000-4000-9000-000000000005",
+      "name": "ftd-synthetic-5",
+      "type": "Device",
+      "isConnected": true
+    },
+    {
+      "id": "00000000-0000-4000-9000-000000000006",
+      "name": "ftd-synthetic-6",
+      "type": "Device",
+      "isConnected": true
+    },
+    {
+      "id": "00000000-0000-4000-9000-000000000007",
+      "name": "ftd-synthetic-7",
+      "type": "Device",
+      "isConnected": true
+    },
+    {
+      "id": "00000000-0000-4000-9000-000000000008",
+      "name": "ftd-synthetic-8",
+      "type": "Device",
+      "isConnected": true
+    },
+    {
+      "id": "00000000-0000-4000-9000-000000000009",
+      "name": "ftd-synthetic-9",
+      "type": "Device",
+      "isConnected": true
+    },
+    {
+      "id": "00000000-0000-4000-9000-00000000000a",
+      "name": "ftd-synthetic-10",
+      "type": "Device",
+      "isConnected": true
+    },
+    {
+      "id": "00000000-0000-4000-9000-00000000000b",
+      "name": "ftd-synthetic-11",
+      "type": "Device",
+      "isConnected": true
+    },
+    {
+      "id": "00000000-0000-4000-9000-00000000000c",
+      "name": "ftd-synthetic-12",
+      "type": "Device",
+      "isConnected": true
+    },
+    {
+      "id": "00000000-0000-4000-9000-00000000000d",
+      "name": "ftd-synthetic-13",
+      "type": "Device",
+      "isConnected": true
+    },
+    {
+      "id": "00000000-0000-4000-9000-00000000000e",
+      "name": "ftd-synthetic-14",
+      "type": "Device",
+      "isConnected": true
+    },
+    {
+      "id": "00000000-0000-4000-9000-00000000000f",
+      "name": "ftd-synthetic-15",
+      "type": "Device",
+      "isConnected": true
+    },
+    {
+      "id": "00000000-0000-4000-9000-000000000010",
+      "name": "ftd-synthetic-16",
+      "type": "Device",
+      "isConnected": true
+    },
+    {
+      "id": "00000000-0000-4000-9000-000000000011",
+      "name": "ftd-synthetic-17",
+      "type": "Device",
+      "isConnected": true
+    },
+    {
+      "id": "00000000-0000-4000-9000-000000000012",
+      "name": "ftd-synthetic-18",
+      "type": "Device",
+      "isConnected": true
+    },
+    {
+      "id": "00000000-0000-4000-9000-000000000013",
+      "name": "ftd-synthetic-19",
+      "type": "Device",
+      "isConnected": true
+    },
+    {
+      "id": "00000000-0000-4000-9000-000000000014",
+      "name": "ftd-synthetic-20",
+      "type": "Device",
+      "isConnected": true
+    },
+    {
+      "id": "00000000-0000-4000-9000-000000000015",
+      "name": "ftd-synthetic-21",
+      "type": "Device",
+      "isConnected": true
+    },
+    {
+      "id": "00000000-0000-4000-9000-000000000016",
+      "name": "ftd-synthetic-22",
+      "type": "Device",
+      "isConnected": true
+    },
+    {
+      "id": "00000000-0000-4000-9000-000000000017",
+      "name": "ftd-synthetic-23",
+      "type": "Device",
+      "isConnected": true
+    },
+    {
+      "id": "00000000-0000-4000-9000-000000000018",
+      "name": "ftd-synthetic-24",
+      "type": "Device",
+      "isConnected": true
+    },
+    {
+      "id": "00000000-0000-4000-9000-000000000019",
+      "name": "ftd-synthetic-25",
+      "type": "Device",
+      "isConnected": true
+    }
+  ],
+  "paging": {
+    "offset": 0,
+    "limit": 25,
+    "count": 40,
+    "pages": 2
+  }
+}

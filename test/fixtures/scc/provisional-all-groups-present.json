@@ -1,0 +1,65 @@
+[
+  {
+    "deviceUid": "00000000-0000-4000-8000-000000000020",
+    "deviceName": "ftd-chassis-ha-vpn",
+    "startTime": "2026-07-31T09:48:05Z",
+    "endTime": "2026-07-31T09:53:05Z",
+    "cpuHealthMetrics": {
+      "linaUsageAvg": 12.4,
+      "snortUsageAvg": 31.7,
+      "systemUsageAvg": 22.0
+    },
+    "memoryHealthMetrics": {
+      "linaUsageAvg": 40.1,
+      "snortUsageAvg": 25.3,
+      "systemUsageAvg": 55.9
+    },
+    "diskHealthMetrics": {
+      "totalDiskUsageAvg": 33.2
+    },
+    "chassisStatsHealthMetrics": {
+      "fan1RpmAvg": 4200,
+      "fan2RpmAvg": 4150,
+      "fan3RpmAvg": 4180,
+      "fan4RpmAvg": 4190,
+      "psu1FanStatus": "UP",
+      "psu1InputStatus": "UP",
+      "psu1OutputStatus": "UP",
+      "psu2FanStatus": "UP",
+      "psu2InputStatus": "UP",
+      "psu2OutputStatus": "DOWN"
+    },
+    "interfaceHealthMetrics": [
+      {
+        "interfaceName": "outside",
+        "linkStatus": "UP",
+        "operationalStatus": "UP",
+        "interfaceType": "Ethernet",
+        "interface": "Ethernet1/1",
+        "inputBytesAvg": 1000,
+        "outputBytesAvg": 2000
+      }
+    ],
+    "haHealthMetrics": {
+      "nodeStatus": "NORMAL",
+      "nodeType": "PRIMARY"
+    },
+    "raVpnSessionHealthMetrics": {
+      "activeRavpnSessionsAvg": 42,
+      "inactiveRavpnSessionsAvg": 3,
+      "peakConcurRavpnSessions": 58
+    },
+    "s2sVpnTunnelHealthMetrics": [
+      {
+        "tunnelId": "tunnel-1",
+        "tunnelName": "hq-to-branch-1",
+        "tunnelState": "TUNNEL_UP"
+      },
+      {
+        "tunnelId": "tunnel-2",
+        "tunnelName": "hq-to-branch-2",
+        "tunnelState": "TUNNEL_DOWN"
+      }
+    ]
+  }
+]

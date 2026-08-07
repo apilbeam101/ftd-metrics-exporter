@@ -1,0 +1,81 @@
+# Optional but recommended. Restricts ingress to the Prometheus/scraper
+# namespace and egress to DNS + HTTPS only -- the exporter never needs to
+# initiate any other kind of connection.
+#
+# Does NOT need an egress rule for pulling the image from ghcr.io: image
+# pulls are performed by the kubelet on the node, not by the pod, so this
+# pod-scoped policy has no effect on them either way.
+#
+# Enforcement depends entirely on the cluster's CNI actually implementing
+# NetworkPolicy. Calico (microk8s's default) does; kindnet (kind's default)
+# does not -- applying this manifest under a non-enforcing CNI will look
+# identical to it working while providing zero actual isolation. Verify
+# enforcement against your specific cluster before relying on this.
+#
+# Adjust the ingress `namespaceSelector` below to match the namespace your
+# Prometheus/Alloy scraper ACTUALLY runs in -- this is commonly NOT the same
+# namespace as the exporter itself (the `monitoring` default below). Verified
+# directly: microk8s's own `observability` addon (enabled via `microk8s
+# enable observability`, the addon this project's own testing steps used)
+# runs its Prometheus in a namespace called `observability`, not
+# `monitoring` -- applying this policy unmodified against that addon leaves
+# the scrape target permanently down (context deadline exceeded) with no
+# error anywhere pointing at the NetworkPolicy as the cause. Get this wrong
+# and Testing step 3 (ServiceMonitor target UP) silently fails against step
+# 4 (NetworkPolicy applied) even though each passes fine in isolation. This
+# assumes the common `kubernetes.io/metadata.name` well-known label that
+# Kubernetes 1.22+ sets automatically.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ftd-metrics-exporter
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: ftd-metrics-exporter
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: ftd-metrics-exporter
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 10049
+  egress:
+    # DNS -- required to resolve the SCC/FMC API hostname.
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # HTTPS to the upstream management API (SCC or on-prem FMC). Cannot be
+    # scoped tighter than 0.0.0.0/0 here since SCC's regional base URLs and
+    # an operator's own FMC host are both arbitrary, operator-configured
+    # endpoints -- narrow this to your specific FMC host/CIDR if you know it
+    # ahead of time.
+    #
+    # Port 443 covers SCC and the common FMC case, but FMC_HOST accepts an
+    # explicit host:port (src/config/validate.ts does no port stripping or
+    # normalization, and every FMC request URL interpolates the configured
+    # host verbatim) -- an FMC reachable on a non-standard port needs that
+    # port added below too, or init() fails with a bare connect-timeout
+    # error that looks identical to a genuinely unreachable host, giving no
+    # hint that a NetworkPolicy egress rule is the actual cause. Verified by
+    # reproduction: pointing FMC_HOST at a real listener on 8443 with only
+    # port 443 open here reproduces exactly this failure.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 443
+        # - protocol: TCP
+        #   port: 8443   # uncomment/adjust if FMC_HOST specifies a non-443 port

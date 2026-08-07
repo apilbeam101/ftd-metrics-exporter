@@ -1,0 +1,36 @@
+# Alternative to servicemonitor.yaml for Prometheus Operator users who
+# scrape pods directly rather than through a Service. Requires the same
+# CRDs. Apply only one of servicemonitor.yaml / podmonitor.yaml, not both,
+# to avoid double-scraping.
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: ftd-metrics-exporter
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: ftd-metrics-exporter
+    # See servicemonitor.yaml's comment: microk8s's observability addon's
+    # Prometheus CR selects PodMonitors on release: kube-prom-stack. Adjust
+    # to your cluster's own Prometheus CR / Helm release name.
+    release: kube-prom-stack
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ftd-metrics-exporter
+  namespaceSelector:
+    matchNames:
+      - monitoring
+  podMetricsEndpoints:
+    - port: metrics
+      path: /metrics
+      # See servicemonitor.yaml's comment: this is INDEPENDENT of
+      # POLL_INTERVAL_SECONDS.
+      interval: 30s
+      # Uncomment if the exporter's native TLS listener is enabled
+      # (METRICS_TLS_CERT_PATH set).
+      # scheme: https
+      # tlsConfig:
+      #   ca:
+      #     secret:
+      #       name: ftd-metrics-exporter-tls-ca
+      #       key: ca.crt

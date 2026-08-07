@@ -1,0 +1,56 @@
+# Requires the Prometheus Operator's CRDs (e.g. microk8s's `observability`
+# or `prometheus` addon). If you're not running the Operator, use
+# podmonitor.yaml instead, or rely on the prometheus.io/scrape annotations
+# already present on the pod template in deployment.yaml.
+# NOTE: this ServiceMonitor's own namespace (`monitoring`, below) must be in
+# networkpolicy.yaml's ingress `namespaceSelector` allowlist, OR your
+# Prometheus Operator's own namespace must be, whichever namespace your
+# Prometheus actually runs in. They are commonly different (e.g. microk8s's
+# `observability` addon runs Prometheus in namespace `observability`, not
+# `monitoring`) -- verified directly: applying networkpolicy.yaml as shipped
+# (which allows only the `monitoring` namespace) against microk8s's
+# observability-addon Prometheus left the scrape target permanently down
+# (context deadline exceeded) until the NetworkPolicy's ingress selector was
+# updated to match Prometheus's real namespace. Set BOTH to the same,
+# correct namespace for your cluster before relying on either.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: ftd-metrics-exporter
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: ftd-metrics-exporter
+    # Match whatever label your Prometheus Operator's `serviceMonitorSelector`
+    # expects -- microk8s's observability addon's Prometheus CR selects on
+    # release: kube-prom-stack (verified against a real microk8s cluster).
+    # Adjust to your cluster's own Prometheus CR / Helm release name.
+    release: kube-prom-stack
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ftd-metrics-exporter
+  namespaceSelector:
+    matchNames:
+      - monitoring
+  endpoints:
+    - port: metrics
+      path: /metrics
+      # IMPORTANT: this interval is INDEPENDENT of POLL_INTERVAL_SECONDS.
+      # The exporter always serves /metrics from an in-memory cache
+      # populated by its own upstream poll timer -- that is
+      # the entire point of the poll-cache-serve pattern. Setting this
+      # interval to match (or exceed) POLL_INTERVAL_SECONDS "to respect the
+      # rate limit" is unnecessary and is documented as *the* most common
+      # mistake new users make with this exporter. A 30s or 60s scrape
+      # interval here costs nothing upstream regardless of the poll cadence.
+      interval: 30s
+      # Uncomment if the exporter's native TLS listener is enabled
+      # (METRICS_TLS_CERT_PATH set). For most Kubernetes users, plain HTTP
+      # within the cluster plus a service mesh or ingress for TLS is the
+      # simpler and recommended posture.
+      # scheme: https
+      # tlsConfig:
+      #   ca:
+      #     secret:
+      #       name: ftd-metrics-exporter-tls-ca
+      #       key: ca.crt
