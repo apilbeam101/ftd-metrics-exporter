@@ -332,18 +332,18 @@ test('server ordering: /healthz answers while backend.init() is still in flight 
 // exactly the case the "server ordering" test above already exercises) exited the process via the
 // signal itself (code=null, signal='SIGINT') instead of index.ts's documented exit-0 graceful path.
 //
-// Uses a real local TCP listener that accepts the connection and never responds, not the "server
-// ordering" test's blackholed 203.0.113.1 -- a second real CI run found that address makes this
-// specific test unfixable via REQUEST_TIMEOUT_SECONDS: the TCP connect attempt itself hangs for
-// createAgent()'s hardcoded 10s connectTimeoutMs (not configurable, and independent of
-// REQUEST_TIMEOUT_SECONDS), which is already at lifecycle.ts's 10s hard-exit budget before
-// generatetoken's own request-level timeout ever gets a chance to matter -- confirmed directly: a
-// REQUEST_TIMEOUT_SECONDS=3 version of this test still took ~10.2s and still hit the hard-exit
-// timer, identically to the REQUEST_TIMEOUT_SECONDS=30 version before it. A listener that accepts
-// the connection immediately (as a real, if slow-to-respond, FMC host would) makes generatetoken's
-// own REQUEST_TIMEOUT_SECONDS the actual governing timeout, matching the pattern the --dump-raw
-// test below already uses for the same reason (a fast, real TCP accept, deliberately slow/absent
-// response).
+// Uses a real local HTTPS listener that completes the TLS handshake and never writes a response
+// body, not the "server ordering" test's blackholed 203.0.113.1 -- two prior real CI runs each
+// found a different way that address defeats REQUEST_TIMEOUT_SECONDS: first, a genuinely
+// unreachable address blocks on createAgent()'s hardcoded, non-configurable 10s connectTimeoutMs
+// before generatetoken's own request-level timeout ever matters; a plain TCP accept-and-ignore
+// listener (this test's first attempted fix) has the same problem one layer up -- TLS handshake
+// bytes never arrive, so the connection never leaves that same 10s-bounded phase either. A real
+// TLS-terminating server that accepts the handshake and only withholds the *HTTP response* is what
+// actually makes generatetoken's REQUEST_TIMEOUT_SECONDS the governing timeout -- matching the
+// --dump-raw test below's already-established pattern (a real https.createServer, deliberately
+// slow/absent response), except that test responds immediately (404) while this one must not
+// respond at all.
 //
 // win32-skipped for the same reason as the SIGTERM/SIGINT tests above: child_process.kill() doesn't
 // deliver a real, catchable signal to a Node.js child there. ---
@@ -356,13 +356,15 @@ for (const signal of ['SIGTERM', 'SIGINT'] as const) {
   }, async (t) => {
     if (!requireDistBuilt(t)) return;
 
-    // Accepts every connection and never writes a response -- generatetoken's
-    // own request stays pending until REQUEST_TIMEOUT_SECONDS aborts it,
-    // which is the timeout this test actually needs to control.
-    const upstream = createServer((socket) => {
-      socket.on('error', () => {
-        // best-effort: a reset/close from the client side during shutdown is expected, not a test failure.
-      });
+    // Completes the TLS handshake, then never writes a response -- keeps
+    // generatetoken's request pending until REQUEST_TIMEOUT_SECONDS aborts
+    // it, which is the timeout this test actually needs to control.
+    const tls = await generateTlsFixture('127.0.0.1', '127.0.0.1');
+    const upstream = https.createServer({ cert: tls.cert, key: tls.key }, (_req, _res) => {
+      // deliberately never calls res.end()/res.writeHead()
+    });
+    upstream.on('clientError', () => {
+      // best-effort: a reset/close from the client side during shutdown is expected, not a test failure.
     });
     await new Promise<void>((resolve) => upstream.listen(0, '127.0.0.1', resolve));
     const upstreamAddress = upstream.address();
