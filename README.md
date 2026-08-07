@@ -20,7 +20,7 @@ Install Node.js 24+, then either:
 npm ci && npm run build
 ```
 
-or
+or (**not yet published** — npm publishing isn't enabled yet; use the from-source path above until it is):
 
 ```
 npm install -g ftd-metrics-exporter

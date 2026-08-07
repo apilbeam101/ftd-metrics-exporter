@@ -4,6 +4,8 @@ All notable changes to this project are documented in this file. Format follows 
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-08-07
+
 Pre-1.0 (`0.x`) — see [docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md) for the remaining items before a 1.0 cut.
 
 ### Added
@@ -18,4 +20,5 @@ Pre-1.0 (`0.x`) — see [docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md) f
 
 - Chassis, HA, and RA VPN/S2S VPN metric groups on both backends — field names may change in a minor release until validated against real hardware/configurations.
 
-[Unreleased]: https://github.com/apilbeam101/ftd-metrics-exporter/commits/main
+[Unreleased]: https://github.com/apilbeam101/ftd-metrics-exporter/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/apilbeam101/ftd-metrics-exporter/releases/tag/v0.1.0

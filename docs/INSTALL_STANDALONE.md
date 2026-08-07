@@ -39,7 +39,7 @@ After any of the above, open a new terminal and confirm with `node --version`.
 
 Pick one of the two install paths below, then continue from step 4 — they lead to the same running process, but the first has no build step and the second requires one.
 
-**From npm** (quickest; ships a pre-built `dist/`, nothing to compile):
+**From npm** (quickest; ships a pre-built `dist/`, nothing to compile) — **not yet published**; npm publishing isn't enabled yet, use the "From source" path below until it is:
 
 1. [Install Node.js 24+](#installing-nodejs).
 2. `npm install -g ftd-metrics-exporter` — the command is then available as `ftd-metrics-exporter`. To try it without installing anything, use `npx ftd-metrics-exporter` instead.

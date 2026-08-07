@@ -119,6 +119,13 @@ jobs:
     name: npm publish --provenance
     needs: verify
     runs-on: ubuntu-latest
+    # No NPM_TOKEN exists yet -- gated off until npm publishing is set up
+    # (see docs/RELEASE_CHECKLIST.md's first-publish items). Uses the `vars`
+    # context, not `secrets`: the `secrets` context is not available in a
+    # job-level `if`, so `if: secrets.NPM_TOKEN != ''` would silently never
+    # match. Flip `vars.PUBLISH_NPM` to `true` (repo Settings -> Secrets and
+    # variables -> Actions -> Variables) once NPM_TOKEN is added.
+    if: vars.PUBLISH_NPM == 'true'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -164,6 +171,13 @@ jobs:
   release:
     name: GitHub Release
     needs: [image, npm]
+    # `npm` is currently gated off (see its own `if:` above) and reports as
+    # `skipped`, not `success` -- GitHub's default `needs` behavior skips
+    # any job whose dependency was itself skipped, which would silently
+    # skip this job (and thus never create a GitHub Release) on every
+    # release until npm publishing is enabled. Explicitly allow a skipped
+    # (but not failed) npm job through.
+    if: always() && needs.image.result == 'success' && needs.npm.result != 'failure'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
