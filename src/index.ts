@@ -44,10 +44,21 @@ import { COMMIT, NODE_VERSION, VERSION } from './version.ts';
  *    from the backend) means `/healthz` answers as soon as the process is
  *    listening, and `/readyz` correctly reports 503 for as long as
  *    `init()`/the first poll takes.
- * 8. `backend.init()`. On failure, the already-started server is stopped
- *    before exiting non-zero, so a failed startup does not leave an
- *    orphaned listener.
- * 9. Start the poller (with its own internal startup jitter).
+ * 8. Construct the poller (construction only — no scheduling until
+ *    `start()`) and call `lifecycle.install()`, both *before*
+ *    `backend.init()`, not after. A real CI run found the gap this
+ *    ordering closes: with signal handlers installed only once `init()`
+ *    had already succeeded, a `SIGTERM`/`SIGINT` arriving during the
+ *    (potentially slow/hanging, per point 7 above) `init()` call had no
+ *    handler registered at all, so Node's default signal handling
+ *    terminated the process directly instead of running the documented
+ *    graceful-shutdown sequence.
+ * 9. `backend.init()`. On failure, `lifecycle.shutdown(1)` runs the same
+ *    guarded stop-server/stop-poller/close-backend sequence a signal would
+ *    have triggered (poller.stop() is a no-op here, since `start()` is
+ *    never reached on this path) rather than a separate ad hoc sequence,
+ *    so a failed startup does not leave an orphaned listener.
+ * 10. Start the poller (with its own internal startup jitter).
  */
 
 function exitWithError(message: string): never {
@@ -179,21 +190,17 @@ async function main(): Promise<void> {
     return;
   }
 
-  try {
-    await backend.init();
-  } catch (cause) {
-    logger.error('backend init() failed — exiting', errorMeta(cause));
-    // A partially-initialized FMC adapter can already own a live Agent
-    // (init() creates the dispatcher/httpClient before the later steps —
-    // token acquisition, domain resolution, discovery — that can fail);
-    // close() is safe to call regardless of how far init() got, since it
-    // only tears down whatever was actually assigned.
-    await backend.close();
-    await server.stop();
-    process.exit(1);
-    return;
-  }
-
+  // createPoller() only constructs — no scheduling happens until start()
+  // below — so it, and lifecycle.install(), can and must happen before
+  // backend.init(), not after. A real CI run found the gap this closes:
+  // with install() called only after a successful init(), a SIGTERM/SIGINT
+  // arriving during server startup or backend.init() (which DESIGN.md §7.2
+  // already documents as potentially slow/hanging — the whole reason the
+  // server starts before init() in the first place) had no signal handler
+  // registered at all, so Node's default handling terminated the process
+  // via the signal itself rather than exiting 0 through the graceful
+  // sequence — observed directly as `code=null signal=SIGINT` against a
+  // real subprocess whose SIGINT landed in exactly this window.
   const poller = createPoller({
     backend,
     cache,
@@ -206,6 +213,21 @@ async function main(): Promise<void> {
 
   const lifecycle = createLifecycle({ server, poller, backend, logger });
   lifecycle.install();
+
+  try {
+    await backend.init();
+  } catch (cause) {
+    logger.error('backend init() failed — exiting', errorMeta(cause));
+    // A partially-initialized FMC adapter can already own a live Agent
+    // (init() creates the dispatcher/httpClient before the later steps —
+    // token acquisition, domain resolution, discovery — that can fail);
+    // close() is safe to call regardless of how far init() got, since it
+    // only tears down whatever was actually assigned. poller.stop() is
+    // included via lifecycle.shutdown() but is a no-op here since
+    // poller.start() is never reached on this path.
+    await lifecycle.shutdown(1);
+    return;
+  }
 
   poller.start();
 }

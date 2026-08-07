@@ -324,6 +324,55 @@ test('server ordering: /healthz answers while backend.init() is still in flight 
   }
 });
 
+// --- Regression: a signal arriving while backend.init() is still in flight must still trigger a
+// graceful shutdown (exit 0), not fall through to Node's default signal handling because no
+// listener was registered yet. A real CI run (ubuntu-latest, Node current) caught this for real:
+// lifecycle.install() originally ran only after a successful backend.init(), so a SIGINT landing
+// in that window (server started, init() still pending against a slow/unreachable upstream --
+// exactly the case the "server ordering" test above already exercises) exited the process via the
+// signal itself (code=null, signal='SIGINT') instead of index.ts's documented exit-0 graceful path.
+// win32-skipped for the same reason as the SIGTERM/SIGINT tests above: child_process.kill() doesn't
+// deliver a real, catchable signal to a Node.js child there. ---
+for (const signal of ['SIGTERM', 'SIGINT'] as const) {
+  test(`${signal} during backend.init(): still exits 0 via the graceful shutdown path, not the raw signal`, {
+    skip:
+      process.platform === 'win32'
+        ? `real ${signal} delivery to a Node.js child is not observable via child_process.kill() on Windows — see lifecycle.test.ts for the platform-independent coverage`
+        : false,
+  }, async (t) => {
+    if (!requireDistBuilt(t)) return;
+    const port = await findFreePort();
+    const exporter = spawnExporter([], {
+      PATH: process.env.PATH ?? '',
+      BACKEND_TYPE: 'fmc',
+      METRICS_PORT: String(port),
+      METRICS_BIND_ADDRESS: '127.0.0.1',
+      FMC_HOST: '203.0.113.1', // RFC 5737 TEST-NET-3 -- documented non-routable, never answers.
+      FMC_USERNAME: 'svc',
+      FMC_PASSWORD: 'a-realistic-looking-password',
+      FMC_TLS_INSECURE_SKIP_VERIFY: 'true',
+      REQUEST_TIMEOUT_SECONDS: '30', // generous -- init() must still be pending when the signal arrives.
+      LOG_LEVEL: 'error',
+      LOG_FORMAT: 'json',
+      ENABLE_DEFAULT_METRICS: 'false',
+    });
+    // No delay after the port binds -- the point is to catch the signal as
+    // close as possible to the start of backend.init(), the exact window
+    // the original bug left unguarded.
+    await waitForPortListening(port, 5_000);
+
+    const killed = exporter.child.kill(signal);
+    assert.ok(killed, `child.kill(${signal}) reported failure`);
+
+    const { code, signal: exitSignal } = await exporter.exitCode;
+    assert.equal(
+      code,
+      0,
+      `expected exit code 0 after ${signal} during backend.init(), got code=${code} signal=${exitSignal}`,
+    );
+  });
+}
+
 // --- Regression: --dump-raw's stdout must contain nothing but the JSON capture -- no log lines
 // interleaved (Stage 11 review finding 3). Every other log line (the config summary, the mandatory
 // dump-raw warning) must go to stderr instead. ---
