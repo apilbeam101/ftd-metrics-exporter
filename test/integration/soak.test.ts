@@ -99,6 +99,15 @@ test(`soak (${CYCLES} cycles): series count stays stable throughout and heap usa
       await app.waitForCycles(target, 45_000);
       seriesCounts.push(await seriesCountAt(app));
     }
+    // Stop scheduling further cycles the instant the last sample is in hand
+    // — pollIntervalSeconds is 0.02s here, so any wall-clock time spent on
+    // the assertions/heap-measurement below (the finally block's app.stop()
+    // is not reached until after all of them) is enough for one more cycle
+    // to complete and push server.requests.length/app.results.length past
+    // CYCLES, exactly the kind of timing-dependent extra request the
+    // "exactly one upstream request per cycle" assertion below is meant to
+    // catch — reproduced on a real CI run (101 !== 100) before this fix.
+    app.stopPoller();
     assert.ok(
       app.results.every((r) => r.outcome === 'success'),
       'every soak cycle against a stable healthy fixture must succeed',
