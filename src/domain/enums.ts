@@ -16,6 +16,34 @@ export type TunnelState = 'TUNNEL_UP' | 'TUNNEL_DOWN' | 'UNKNOWN';
 
 export type PsuStatus = 'UP' | 'DOWN';
 
+/**
+ * Interface-type values confirmed live (DESIGN.md §4.3/Appendix B):
+ * `Ethernet`, `Management`, `SubInterface` (SCC, 2026-08-11 FTDv/subinterface
+ * capture); `GigabitEthernet` is documented on FMC but not yet live-verified.
+ * Unlike every other enum here, this is purely informational, not a state
+ * signal, and its rendered label is the versioned public API (DESIGN.md
+ * §13) — see `classifyInterfaceType` in enum-render.ts: an unrecognized
+ * value is flagged for `ftd_exporter_unknown_enum_total` but is NEVER
+ * coerced to a fallback label, unlike the state-set/info enums above.
+ */
+export const KNOWN_INTERFACE_TYPE_VALUES: readonly string[] = [
+  'Ethernet',
+  'Management',
+  'SubInterface',
+  'GigabitEthernet',
+];
+
+/**
+ * SCC device-inventory redundancy mode (DESIGN.md §4.6.1), confirmed live
+ * (2026-08-11): `STANDALONE` on every device before pairing, `HA` on a real
+ * paired device's single inventory row. Unlike `interface_type`, this is a
+ * bounded state descriptor, not an unbounded informational field — an
+ * unrecognized value falls back to `"unknown"` like every other enum in
+ * this file (see `classifyRedundancyMode` in enum-render.ts).
+ */
+export type RedundancyMode = 'STANDALONE' | 'HA';
+export const REDUNDANCY_MODE_VALUES: readonly RedundancyMode[] = ['STANDALONE', 'HA'];
+
 export const HA_NODE_STATUS_VALUES: readonly HaNodeStatus[] = [
   'NORMAL',
   'ERROR',

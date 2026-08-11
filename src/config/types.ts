@@ -38,6 +38,8 @@ export interface SccBackendConfig {
   apiToken: Secret;
   fmcUid: string;
   timeRange: TimeRange;
+  /** DESIGN.md §4.6.1: device-inventory poll cadence, independent of the health-metrics poll. */
+  inventoryPollIntervalSeconds: number;
 }
 
 export interface FmcBackendConfig {

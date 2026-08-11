@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { createBackend } from '../../src/backend-factory.ts';
+import { createBackend, getSccDeviceInventoryReader } from '../../src/backend-factory.ts';
 import { Secret } from '../../src/config/secret.ts';
 import type { AppConfig } from '../../src/config/types.ts';
 import { createRealClock } from '../../src/http/clock.ts';
@@ -32,6 +32,7 @@ test('createBackend: kind "scc" produces a HealthBackend with kind scc', () => {
       apiToken: new Secret('token'),
       fmcUid: 'fmc-uid-1',
       timeRange: '5m',
+      inventoryPollIntervalSeconds: 300,
     },
   };
   const backend = createBackend({
@@ -67,6 +68,58 @@ test('createBackend: kind "fmc" produces a HealthBackend with kind fmc', () => {
   assert.equal(backend.kind, 'fmc');
 });
 
+// --- getSccDeviceInventoryReader (DESIGN.md §4.6.1) ---
+
+test('getSccDeviceInventoryReader: returns undefined for an FMC backend', () => {
+  const config: AppConfig = {
+    ...baseConfig(),
+    backend: {
+      kind: 'fmc',
+      host: 'fmc.example.internal',
+      username: 'svc',
+      password: new Secret('pw'),
+      tlsInsecureSkipVerify: false,
+      maxConcurrentRequests: 5,
+      discoveryIntervalSeconds: 900,
+      metricFamilies: ['CPU'],
+      timeRange: '5m',
+    },
+  };
+  const backend = createBackend({
+    config,
+    clock: createRealClock(),
+    logger: quietLogger(),
+    pollIntervalSeconds: config.pollIntervalSeconds,
+  });
+  assert.equal(getSccDeviceInventoryReader(backend), undefined);
+});
+
+test('getSccDeviceInventoryReader: returns a working reader for an SCC backend, backed by the real adapter instance', () => {
+  const config: AppConfig = {
+    ...baseConfig(),
+    backend: {
+      kind: 'scc',
+      baseUrl: 'https://api.eu.security.cisco.com/firewall',
+      apiToken: new Secret('token'),
+      fmcUid: 'fmc-uid-1',
+      timeRange: '5m',
+      inventoryPollIntervalSeconds: 300,
+    },
+  };
+  const backend = createBackend({
+    config,
+    clock: createRealClock(),
+    logger: quietLogger(),
+    pollIntervalSeconds: config.pollIntervalSeconds,
+  });
+  const reader = getSccDeviceInventoryReader(backend);
+  assert.ok(reader !== undefined);
+  // Before any fetchSnapshot() call, the real adapter's inventory cache is
+  // empty — proves this is reading the actual backend instance createBackend
+  // constructed, not a stub.
+  assert.deepEqual(reader(), []);
+});
+
 test('createBackend: SCC hooks (onParseError etc.) are actually wired, not silently dropped', async () => {
   const config: AppConfig = {
     ...baseConfig(),
@@ -76,6 +129,7 @@ test('createBackend: SCC hooks (onParseError etc.) are actually wired, not silen
       apiToken: new Secret('token'),
       fmcUid: 'fmc-uid-1',
       timeRange: '5m',
+      inventoryPollIntervalSeconds: 300,
     },
   };
   let sawRawResponse = false;

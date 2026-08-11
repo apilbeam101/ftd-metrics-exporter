@@ -537,7 +537,7 @@
           "values": false
         }
       },
-      "description": "Distinct devices currently over any resource threshold (system CPU > 85%, system memory > 90%, or disk > 90%) — the same thresholds the alert rules use. Counted via `count by (device_uid)` so a device breaching two thresholds at once counts once, not twice.",
+      "description": "Distinct devices currently over any resource threshold (system CPU > 85%, system memory > 90%, or disk > 90%) — the same thresholds the alert rules use. Counted via `count by (device_uid, device_name)` so a device breaching two thresholds at once counts once, not twice. `device_name` is part of the grouping key, not just `device_uid`: on SCC, an HA pair's two nodes share one `device_uid` (confirmed live), so grouping by `device_uid` alone would collapse two genuinely different unhealthy devices into one.",
       "targets": [
         {
           "datasource": {
@@ -545,7 +545,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "refId": "A",
-          "expr": "count(count by (device_uid) (\n  (ftd_cpu_usage_ratio{job=~\"$job\",instance=~\"$instance\",device_name=~\"$device\",component=\"system\"} > 0.85)\n    or (ftd_memory_usage_ratio{job=~\"$job\",instance=~\"$instance\",device_name=~\"$device\",component=\"system\"} > 0.90)\n    or (ftd_disk_usage_ratio{job=~\"$job\",instance=~\"$instance\",device_name=~\"$device\"} > 0.90)\n))",
+          "expr": "count(count by (device_uid, device_name) (\n  (ftd_cpu_usage_ratio{job=~\"$job\",instance=~\"$instance\",device_name=~\"$device\",component=\"system\"} > 0.85)\n    or (ftd_memory_usage_ratio{job=~\"$job\",instance=~\"$instance\",device_name=~\"$device\",component=\"system\"} > 0.90)\n    or (ftd_disk_usage_ratio{job=~\"$job\",instance=~\"$instance\",device_name=~\"$device\"} > 0.90)\n))",
           "legendFormat": "unhealthy",
           "instant": true,
           "range": false,
@@ -607,7 +607,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "refId": "A",
-          "expr": "count(\nftd_interface_operational_up{job=~\"$job\",instance=~\"$instance\",device_name=~\"$device\",interface=~\"$interface\"} == 0\n  unless on(job, instance, device_uid, interface)\n    label_replace(\n      max by (job, instance, device_uid, interface_name) (ftd_interface_operational_up{job=~\"$job\",instance=~\"$instance\",device_name=~\"$device\",interface=~\"$interface\"}),\n      \"interface\", \"$1\", \"interface_name\", \"(.*)\"\n    )\n)",
+          "expr": "count(\nftd_interface_operational_up{job=~\"$job\",instance=~\"$instance\",device_name=~\"$device\",interface=~\"$interface\"} == 0\n  unless on(job, instance, device_uid, device_name, interface)\n    label_replace(\n      max by (job, instance, device_uid, device_name, interface_name) (ftd_interface_operational_up{job=~\"$job\",instance=~\"$instance\",device_name=~\"$device\",interface=~\"$interface\"}),\n      \"interface\", \"$1\", \"interface_name\", \"(.*)\"\n    )\n)",
           "legendFormat": "down",
           "instant": true,
           "range": false,
@@ -679,6 +679,116 @@
     },
     {
       "id": 10,
+      "type": "stat",
+      "title": "Devices in SCC inventory",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 0,
+        "y": 5
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "none",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "description": "SCC only (DESIGN.md §14.6): count of `ftd_device_info`, from SCC device inventory rather than health/metrics — the denominator for \"Devices unreachable\" next to it, and for comparing against \"Devices reporting\" (which comes from health/metrics and is silently missing anything UNREACHABLE). Empty on the FMC backend, which has no equivalent inventory endpoint wired up.",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A",
+          "expr": "count(ftd_device_info{job=~\"$job\",instance=~\"$instance\",device_name=~\"$device\"})",
+          "legendFormat": "in inventory",
+          "instant": true,
+          "range": false,
+          "editorMode": "code"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "stat",
+      "title": "Devices unreachable",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 3,
+        "y": 5
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "unit": "short",
+          "noValue": "0",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "description": "SCC only (DESIGN.md §14.6): devices SCC device inventory reports UNREACHABLE. This is the ONLY signal for a device that has gone fully absent from health/metrics — confirmed live (2026-08-11), an unreachable device produces no series there at all, so it never shows up anywhere else on this dashboard. See the FtdDeviceUnreachable alert.",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A",
+          "expr": "count(ftd_device_connectivity_up{job=~\"$job\",instance=~\"$instance\",device_name=~\"$device\"} == 0)",
+          "legendFormat": "unreachable",
+          "instant": true,
+          "range": false,
+          "editorMode": "code"
+        }
+      ]
+    },
+    {
+      "id": 12,
       "type": "table",
       "title": "Per-device summary",
       "datasource": {
@@ -689,7 +799,7 @@
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 5
+        "y": 9
       },
       "fieldConfig": {
         "defaults": {
@@ -899,7 +1009,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "refId": "F",
-          "expr": "count by (device_uid, device_name) (\nftd_interface_operational_up{job=~\"$job\",instance=~\"$instance\",device_name=~\"$device\",interface=~\"$interface\"} == 0\n  unless on(job, instance, device_uid, interface)\n    label_replace(\n      max by (job, instance, device_uid, interface_name) (ftd_interface_operational_up{job=~\"$job\",instance=~\"$instance\",device_name=~\"$device\",interface=~\"$interface\"}),\n      \"interface\", \"$1\", \"interface_name\", \"(.*)\"\n    )\n)",
+          "expr": "count by (device_uid, device_name) (\nftd_interface_operational_up{job=~\"$job\",instance=~\"$instance\",device_name=~\"$device\",interface=~\"$interface\"} == 0\n  unless on(job, instance, device_uid, device_name, interface)\n    label_replace(\n      max by (job, instance, device_uid, device_name, interface_name) (ftd_interface_operational_up{job=~\"$job\",instance=~\"$instance\",device_name=~\"$device\",interface=~\"$interface\"}),\n      \"interface\", \"$1\", \"interface_name\", \"(.*)\"\n    )\n)",
           "legendFormat": "ifaces_down",
           "instant": true,
           "range": false,
@@ -908,7 +1018,7 @@
       ]
     },
     {
-      "id": 11,
+      "id": 13,
       "type": "row",
       "title": "CPU and memory",
       "collapsed": false,
@@ -916,12 +1026,12 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 15
+        "y": 19
       },
       "panels": []
     },
     {
-      "id": 12,
+      "id": 14,
       "type": "timeseries",
       "title": "CPU by component",
       "datasource": {
@@ -932,7 +1042,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 16
+        "y": 20
       },
       "fieldConfig": {
         "defaults": {
@@ -978,7 +1088,7 @@
       ]
     },
     {
-      "id": 13,
+      "id": 15,
       "type": "timeseries",
       "title": "Memory by component",
       "datasource": {
@@ -989,7 +1099,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 16
+        "y": 20
       },
       "fieldConfig": {
         "defaults": {
@@ -1035,7 +1145,7 @@
       ]
     },
     {
-      "id": 14,
+      "id": 16,
       "type": "gauge",
       "title": "Current system CPU",
       "datasource": {
@@ -1046,7 +1156,7 @@
         "h": 6,
         "w": 6,
         "x": 0,
-        "y": 24
+        "y": 28
       },
       "fieldConfig": {
         "defaults": {
@@ -1102,7 +1212,7 @@
       ]
     },
     {
-      "id": 15,
+      "id": 17,
       "type": "gauge",
       "title": "Current system memory",
       "datasource": {
@@ -1113,7 +1223,7 @@
         "h": 6,
         "w": 6,
         "x": 6,
-        "y": 24
+        "y": 28
       },
       "fieldConfig": {
         "defaults": {
@@ -1169,7 +1279,7 @@
       ]
     },
     {
-      "id": 16,
+      "id": 18,
       "type": "bargauge",
       "title": "Top 10 devices by system CPU",
       "datasource": {
@@ -1180,7 +1290,7 @@
         "h": 6,
         "w": 12,
         "x": 12,
-        "y": 24
+        "y": 28
       },
       "fieldConfig": {
         "defaults": {
@@ -1236,7 +1346,7 @@
       ]
     },
     {
-      "id": 17,
+      "id": 19,
       "type": "row",
       "title": "Disk",
       "collapsed": false,
@@ -1244,12 +1354,12 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 30
+        "y": 34
       },
       "panels": []
     },
     {
-      "id": 18,
+      "id": 20,
       "type": "gauge",
       "title": "Current disk usage",
       "datasource": {
@@ -1260,7 +1370,7 @@
         "h": 7,
         "w": 8,
         "x": 0,
-        "y": 31
+        "y": 35
       },
       "fieldConfig": {
         "defaults": {
@@ -1316,7 +1426,7 @@
       ]
     },
     {
-      "id": 19,
+      "id": 21,
       "type": "timeseries",
       "title": "Disk usage trend",
       "datasource": {
@@ -1327,7 +1437,7 @@
         "h": 7,
         "w": 16,
         "x": 8,
-        "y": 31
+        "y": 35
       },
       "fieldConfig": {
         "defaults": {
@@ -1390,7 +1500,7 @@
       ]
     },
     {
-      "id": 20,
+      "id": 22,
       "type": "row",
       "title": "Interfaces",
       "collapsed": false,
@@ -1398,12 +1508,12 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 38
+        "y": 42
       },
       "panels": []
     },
     {
-      "id": 21,
+      "id": 23,
       "type": "timeseries",
       "title": "Throughput (mirrored: in above, out below)",
       "datasource": {
@@ -1414,7 +1524,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 39
+        "y": 43
       },
       "fieldConfig": {
         "defaults": {
@@ -1480,7 +1590,7 @@
       ]
     },
     {
-      "id": 22,
+      "id": 24,
       "type": "timeseries",
       "title": "Errors and drops",
       "datasource": {
@@ -1491,7 +1601,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 39
+        "y": 43
       },
       "fieldConfig": {
         "defaults": {
@@ -1554,7 +1664,7 @@
       ]
     },
     {
-      "id": 23,
+      "id": 25,
       "type": "timeseries",
       "title": "Buffer overruns / underruns / L2 decode drops",
       "datasource": {
@@ -1565,7 +1675,7 @@
         "h": 7,
         "w": 12,
         "x": 0,
-        "y": 47
+        "y": 51
       },
       "fieldConfig": {
         "defaults": {
@@ -1628,7 +1738,7 @@
       ]
     },
     {
-      "id": 24,
+      "id": 26,
       "type": "state-timeline",
       "title": "Link and operational state history",
       "datasource": {
@@ -1639,7 +1749,7 @@
         "h": 7,
         "w": 12,
         "x": 12,
-        "y": 47
+        "y": 51
       },
       "fieldConfig": {
         "defaults": {
@@ -1714,7 +1824,7 @@
       ]
     },
     {
-      "id": 25,
+      "id": 27,
       "type": "table",
       "title": "Interface inventory (including down and unused)",
       "datasource": {
@@ -1725,7 +1835,7 @@
         "h": 9,
         "w": 24,
         "x": 0,
-        "y": 54
+        "y": 58
       },
       "fieldConfig": {
         "defaults": {
@@ -1839,7 +1949,7 @@
       ]
     },
     {
-      "id": 26,
+      "id": 28,
       "type": "row",
       "title": "High availability (conditional — empty unless devices are in an HA pair)",
       "collapsed": false,
@@ -1847,12 +1957,12 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 63
+        "y": 67
       },
       "panels": []
     },
     {
-      "id": 27,
+      "id": 29,
       "type": "state-timeline",
       "title": "HA status history",
       "datasource": {
@@ -1863,7 +1973,7 @@
         "h": 7,
         "w": 16,
         "x": 0,
-        "y": 64
+        "y": 68
       },
       "fieldConfig": {
         "defaults": {
@@ -1916,7 +2026,7 @@
       ]
     },
     {
-      "id": 28,
+      "id": 30,
       "type": "table",
       "title": "Current HA role",
       "datasource": {
@@ -1927,7 +2037,7 @@
         "h": 7,
         "w": 8,
         "x": 16,
-        "y": 64
+        "y": 68
       },
       "fieldConfig": {
         "defaults": {
@@ -2004,7 +2114,7 @@
       ]
     },
     {
-      "id": 29,
+      "id": 31,
       "type": "row",
       "title": "VPN (conditional — empty unless RA VPN or S2S VPN is configured)",
       "collapsed": false,
@@ -2012,12 +2122,12 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 71
+        "y": 75
       },
       "panels": []
     },
     {
-      "id": 30,
+      "id": 32,
       "type": "timeseries",
       "title": "RA VPN sessions",
       "datasource": {
@@ -2028,7 +2138,7 @@
         "h": 7,
         "w": 16,
         "x": 0,
-        "y": 72
+        "y": 76
       },
       "fieldConfig": {
         "defaults": {
@@ -2115,7 +2225,7 @@
       ]
     },
     {
-      "id": 31,
+      "id": 33,
       "type": "stat",
       "title": "Active RA VPN sessions",
       "datasource": {
@@ -2126,7 +2236,7 @@
         "h": 7,
         "w": 8,
         "x": 16,
-        "y": 72
+        "y": 76
       },
       "fieldConfig": {
         "defaults": {
@@ -2164,7 +2274,7 @@
       ]
     },
     {
-      "id": 32,
+      "id": 34,
       "type": "table",
       "title": "S2S tunnels not up",
       "datasource": {
@@ -2175,7 +2285,7 @@
         "h": 7,
         "w": 16,
         "x": 0,
-        "y": 79
+        "y": 83
       },
       "fieldConfig": {
         "defaults": {
@@ -2269,7 +2379,7 @@
       ]
     },
     {
-      "id": 33,
+      "id": 35,
       "type": "stat",
       "title": "Tunnels currently down",
       "datasource": {
@@ -2280,7 +2390,7 @@
         "h": 7,
         "w": 8,
         "x": 16,
-        "y": 79
+        "y": 83
       },
       "fieldConfig": {
         "defaults": {
@@ -2331,7 +2441,7 @@
       ]
     },
     {
-      "id": 34,
+      "id": 36,
       "type": "row",
       "title": "Chassis (conditional — chassis-based platforms only, empty on appliances)",
       "collapsed": false,
@@ -2339,12 +2449,12 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 86
+        "y": 90
       },
       "panels": []
     },
     {
-      "id": 35,
+      "id": 37,
       "type": "timeseries",
       "title": "Fan speed",
       "datasource": {
@@ -2355,7 +2465,7 @@
         "h": 7,
         "w": 12,
         "x": 0,
-        "y": 87
+        "y": 91
       },
       "fieldConfig": {
         "defaults": {
@@ -2402,7 +2512,7 @@
       ]
     },
     {
-      "id": 36,
+      "id": 38,
       "type": "stat",
       "title": "PSU status",
       "datasource": {
@@ -2413,7 +2523,7 @@
         "h": 7,
         "w": 12,
         "x": 12,
-        "y": 87
+        "y": 91
       },
       "fieldConfig": {
         "defaults": {
@@ -2510,7 +2620,7 @@
       ]
     },
     {
-      "id": 37,
+      "id": 39,
       "type": "row",
       "title": "Data freshness and exporter diagnostics",
       "collapsed": false,
@@ -2518,12 +2628,12 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 94
+        "y": 98
       },
       "panels": []
     },
     {
-      "id": 38,
+      "id": 40,
       "type": "timeseries",
       "title": "Per-device data staleness",
       "datasource": {
@@ -2534,7 +2644,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 95
+        "y": 99
       },
       "fieldConfig": {
         "defaults": {
@@ -2596,7 +2706,7 @@
       ]
     },
     {
-      "id": 39,
+      "id": 41,
       "type": "timeseries",
       "title": "Poll duration",
       "datasource": {
@@ -2607,7 +2717,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 95
+        "y": 99
       },
       "fieldConfig": {
         "defaults": {
@@ -2666,7 +2776,7 @@
       ]
     },
     {
-      "id": 40,
+      "id": 42,
       "type": "timeseries",
       "title": "Poll errors by reason",
       "datasource": {
@@ -2677,7 +2787,7 @@
         "h": 7,
         "w": 8,
         "x": 0,
-        "y": 103
+        "y": 107
       },
       "fieldConfig": {
         "defaults": {
@@ -2723,7 +2833,7 @@
       ]
     },
     {
-      "id": 41,
+      "id": 43,
       "type": "timeseries",
       "title": "Upstream request rate by status code",
       "datasource": {
@@ -2734,7 +2844,7 @@
         "h": 7,
         "w": 8,
         "x": 8,
-        "y": 103
+        "y": 107
       },
       "fieldConfig": {
         "defaults": {
@@ -2779,7 +2889,7 @@
       ]
     },
     {
-      "id": 42,
+      "id": 44,
       "type": "stat",
       "title": "Exporter diagnostics",
       "datasource": {
@@ -2790,7 +2900,7 @@
         "h": 7,
         "w": 8,
         "x": 16,
-        "y": 103
+        "y": 107
       },
       "fieldConfig": {
         "defaults": {
@@ -2963,7 +3073,7 @@
       ]
     },
     {
-      "id": 43,
+      "id": 45,
       "type": "table",
       "title": "Exporter build info",
       "datasource": {
@@ -2974,7 +3084,7 @@
         "h": 5,
         "w": 24,
         "x": 0,
-        "y": 110
+        "y": 114
       },
       "fieldConfig": {
         "defaults": {

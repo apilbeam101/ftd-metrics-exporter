@@ -160,6 +160,33 @@ groups:
             stopped collecting) rather than an exporter problem.
 
   # ---------------------------------------------------------------------------
+  # Device connectivity (SCC only, DESIGN.md §14.6). `ftd_device_connectivity_up`
+  # comes from SCC's device inventory, not health/metrics -- the two are
+  # genuinely independent upstream calls on independent cadences. This is the
+  # ONLY signal that exists for a device that has gone fully UNREACHABLE:
+  # confirmed live (2026-08-11) that such a device is silently absent from
+  # health/metrics entirely -- no error, no series, nothing -- so
+  # FtdDeviceMetricsStale above cannot cover it (an absent series produces no
+  # result to alert on). `for: 10m` rides out a single stale/transient
+  # inventory refresh at the default 300s cadence -- roughly two consecutive
+  # refreshes must agree before this fires.
+  # ---------------------------------------------------------------------------
+  - name: ftd-device-connectivity
+    rules:
+      - alert: FtdDeviceUnreachable
+        expr: ftd_device_connectivity_up == 0
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: FTD device {{ $labels.device_name }} is unreachable from SCC
+          description: >-
+            SCC's device inventory has reported {{ $labels.device_name }} as
+            UNREACHABLE for over 10 minutes. This device will also be silently
+            absent from every other ftd_* health metric -- this is the only
+            alert that can catch it going offline.
+
+  # ---------------------------------------------------------------------------
   # Resource pressure. Ratios are 0-1 (DESIGN.md §14.13), not 0-100 -- a
   # threshold written as `> 85` would never fire.
   # ---------------------------------------------------------------------------
@@ -226,22 +253,22 @@ groups:
   # that needs no config, no recording rule, and no metric-surface change:
   #
   #   ftd_interface_operational_up == 0
-  #     unless on(job, instance, device_uid, interface)
+  #     unless on(job, instance, device_uid, device_name, interface)
   #       label_replace(
-  #         max by (job, instance, device_uid, interface_name) (ftd_interface_operational_up),
+  #         max by (job, instance, device_uid, device_name, interface_name) (ftd_interface_operational_up),
   #         "interface", "$1", "interface_name", "(.*)")
   #
   # label_replace copies interface_name over interface, so for an *unnamed*
-  # interface the rewritten series has an identical (device_uid, interface)
-  # pair to the original and `unless` removes it; for a *named* interface the
-  # rewritten pair differs and the original survives. This expresses the
-  # otherwise-inexpressible label-to-label comparison entirely in PromQL.
-  # Verified with promtool against all three cases (named+down fires,
-  # unnamed+down does not, named+up does not) -- see
+  # interface the rewritten series has an identical (device_uid, device_name,
+  # interface) pair to the original and `unless` removes it; for a *named*
+  # interface the rewritten pair differs and the original survives. This
+  # expresses the otherwise-inexpressible label-to-label comparison entirely
+  # in PromQL. Verified with promtool against all three cases (named+down
+  # fires, unnamed+down does not, named+up does not) -- see
   # alerts/ftd-health.test.yaml.
   #
-  # The two non-obvious pieces of that expression, both added after a review
-  # found the naive form silently broken, and both regression-tested:
+  # The three non-obvious pieces of that expression, all added after a review
+  # found the naive form silently broken, and all regression-tested:
   #
   # `max by (...)` on the RHS is load-bearing, not a stylistic reduction.
   # label_replace overwrites `interface`, so two interfaces on one device that
@@ -253,11 +280,22 @@ groups:
   # to be down for it to happen. `max by` folds the duplicates before
   # label_replace can mint them.
   #
-  # `job, instance` in the `unless on(...)` list keeps the suppression
-  # per-exporter. Without them, two exporters scraping the same device (an
-  # HA/rollout overlap, or an FMC and SCC exporter covering one fleet) match
-  # across instances: exporter B reporting the §4.3 fallback name suppresses
-  # exporter A's genuine named-interface alert entirely.
+  # `job, instance` in both lists keeps the suppression per-exporter. Without
+  # them, two exporters scraping the same device (an HA/rollout overlap, or an
+  # FMC and SCC exporter covering one fleet) match across instances: exporter
+  # B reporting the §4.3 fallback name suppresses exporter A's genuine
+  # named-interface alert entirely.
+  #
+  # `device_name` in both lists (added 2026-08-11, alongside the existing
+  # `device_uid`) closes a gap the HA-sharing discovery in DESIGN.md §14.14
+  # opened: on SCC, both nodes of an HA pair report the SAME `device_uid`, and
+  # HA config sync means both peers usually have the identical hardware-id
+  # layout too. Without `device_name` in these lists, an *unnamed* interface
+  # on peer B folds together with (and, via the `unless`, can suppress) a
+  # *named*, genuinely-down interface on peer A at the same hardware id --
+  # cross-device suppression that `device_uid` alone can no longer prevent.
+  # `device_name` is what actually disambiguates the two peers, mirroring the
+  # same fix already applied to the dashboard's device-counting panel.
   #
   # Rejected alternatives, for the record: an allowlist needs per-fleet
   # maintenance and silently misses new interfaces; "ever been up" needs a
@@ -270,9 +308,9 @@ groups:
       - alert: FtdInterfaceDown
         expr: |
           ftd_interface_operational_up == 0
-            unless on(job, instance, device_uid, interface)
+            unless on(job, instance, device_uid, device_name, interface)
               label_replace(
-                max by (job, instance, device_uid, interface_name) (ftd_interface_operational_up),
+                max by (job, instance, device_uid, device_name, interface_name) (ftd_interface_operational_up),
                 "interface", "$1", "interface_name", "(.*)"
               )
         for: 5m
@@ -295,9 +333,9 @@ groups:
         # this is a level check rather than a rate().
         expr: |
           ftd_interface_input_errors_avg > 0
-            unless on(job, instance, device_uid, interface)
+            unless on(job, instance, device_uid, device_name, interface)
               label_replace(
-                max by (job, instance, device_uid, interface_name) (ftd_interface_input_errors_avg),
+                max by (job, instance, device_uid, device_name, interface_name) (ftd_interface_input_errors_avg),
                 "interface", "$1", "interface_name", "(.*)"
               )
         for: 15m

@@ -31,6 +31,7 @@ export interface SelfMetrics {
   devices: Gauge<never>;
   devicesDiscovered: Gauge<never>;
   discoveryErrorsTotal: Counter<never>;
+  sccInventoryErrorsTotal: Counter<never>;
   series: Gauge<never>;
   parseErrorsTotal: Counter<'group'>;
   unknownEnumTotal: Counter<'metric' | 'value'>;
@@ -138,6 +139,11 @@ export function createSelfMetrics(
     discoveryErrorsTotal: new Counter({
       name: 'ftd_exporter_discovery_errors_total',
       help: 'FMC backend: discovery failures.',
+      registers,
+    }),
+    sccInventoryErrorsTotal: new Counter({
+      name: 'ftd_exporter_scc_inventory_errors_total',
+      help: 'SCC backend: device-inventory poll failures.',
       registers,
     }),
     series: new Gauge({

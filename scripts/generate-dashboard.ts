@@ -75,14 +75,16 @@ function targets(...specs: Array<[string, string] | [string, string, Partial<Tar
  * for the full derivation and the rejected alternatives: `label_replace` copies
  * `interface_name` over `interface`, so an *unnamed* interface (whose
  * `interface_name` fell back to its hardware id per DESIGN.md §4.3) produces an
- * identical (device_uid, interface) pair and is removed by `unless`, while a
- * named one survives. This expresses a label-to-label comparison PromQL cannot
- * otherwise state.
+ * identical (device_uid, device_name, interface) pair and is removed by
+ * `unless`, while a named one survives. This expresses a label-to-label
+ * comparison PromQL cannot otherwise state.
  *
- * The `max by (...)` on the RHS and the `job, instance` in the `unless on(...)`
- * list are both load-bearing — see the long comment on FtdInterfaceDown for why
- * omitting either silently breaks the filter (a fleet-wide duplicate-labelset
- * abort, and cross-exporter suppression, respectively).
+ * The `max by (...)` on the RHS and the `job, instance, device_name` in the
+ * `unless on(...)` list are all load-bearing — see the long comment on
+ * FtdInterfaceDown for why omitting any of them silently breaks the filter (a
+ * fleet-wide duplicate-labelset abort, cross-exporter suppression, and
+ * cross-HA-peer suppression once two devices share one `device_uid`,
+ * respectively — the last one confirmed live, DESIGN.md §14.14).
  *
  * Kept identical in shape to the alert rules deliberately: a dashboard panel
  * that counts down interfaces differently from the alert that pages on them is
@@ -91,9 +93,9 @@ function targets(...specs: Array<[string, string] | [string, string, Partial<Tar
 function namedInterfacesOnly(selector: string, condition: string): string {
   return (
     `${selector} ${condition}\n` +
-    `  unless on(job, instance, device_uid, interface)\n` +
+    `  unless on(job, instance, device_uid, device_name, interface)\n` +
     `    label_replace(\n` +
-    `      max by (job, instance, device_uid, interface_name) (${selector}),\n` +
+    `      max by (job, instance, device_uid, device_name, interface_name) (${selector}),\n` +
     `      "interface", "$1", "interface_name", "(.*)"\n` +
     `    )`
   );
@@ -273,9 +275,9 @@ const row1: RowSpec = {
       width: 4,
       height: 4,
       description:
-        'Distinct devices currently over any resource threshold (system CPU > 85%, system memory > 90%, or disk > 90%) — the same thresholds the alert rules use. Counted via `count by (device_uid)` so a device breaching two thresholds at once counts once, not twice.',
+        "Distinct devices currently over any resource threshold (system CPU > 85%, system memory > 90%, or disk > 90%) — the same thresholds the alert rules use. Counted via `count by (device_uid, device_name)` so a device breaching two thresholds at once counts once, not twice. `device_name` is part of the grouping key, not just `device_uid`: on SCC, an HA pair's two nodes share one `device_uid` (confirmed live), so grouping by `device_uid` alone would collapse two genuinely different unhealthy devices into one.",
       targets: targets([
-        `count(count by (device_uid) (\n` +
+        `count(count by (device_uid, device_name) (\n` +
           `  (ftd_cpu_usage_ratio{${SCOPE},component="system"} > 0.85)\n` +
           `    or (ftd_memory_usage_ratio{${SCOPE},component="system"} > 0.90)\n` +
           `    or (ftd_disk_usage_ratio{${SCOPE}} > 0.90)\n` +
@@ -343,6 +345,50 @@ const row1: RowSpec = {
       defaults: {
         unit: 'short',
         noValue: NO_DATA.vpn,
+        thresholds: {
+          mode: 'absolute',
+          steps: [
+            { color: 'green', value: null },
+            { color: 'red', value: 1 },
+          ],
+        },
+      },
+      options: {
+        colorMode: 'background',
+        graphMode: 'none',
+        reduceOptions: { calcs: ['lastNotNull'], fields: '', values: false },
+      },
+    },
+    {
+      title: 'Devices in SCC inventory',
+      type: 'stat',
+      width: 3,
+      height: 4,
+      description:
+        'SCC only (DESIGN.md §14.6): count of `ftd_device_info`, from SCC device inventory rather than health/metrics — the denominator for "Devices unreachable" next to it, and for comparing against "Devices reporting" (which comes from health/metrics and is silently missing anything UNREACHABLE). Empty on the FMC backend, which has no equivalent inventory endpoint wired up.',
+      targets: targets([`count(ftd_device_info{${SCOPE}})`, 'in inventory', { instant: true }]),
+      defaults: { unit: 'short' },
+      options: {
+        colorMode: 'none',
+        graphMode: 'none',
+        reduceOptions: { calcs: ['lastNotNull'], fields: '', values: false },
+      },
+    },
+    {
+      title: 'Devices unreachable',
+      type: 'stat',
+      width: 3,
+      height: 4,
+      description:
+        'SCC only (DESIGN.md §14.6): devices SCC device inventory reports UNREACHABLE. This is the ONLY signal for a device that has gone fully absent from health/metrics — confirmed live (2026-08-11), an unreachable device produces no series there at all, so it never shows up anywhere else on this dashboard. See the FtdDeviceUnreachable alert.',
+      targets: targets([
+        `count(ftd_device_connectivity_up{${SCOPE}} == 0)`,
+        'unreachable',
+        { instant: true },
+      ]),
+      defaults: {
+        unit: 'short',
+        noValue: '0',
         thresholds: {
           mode: 'absolute',
           steps: [

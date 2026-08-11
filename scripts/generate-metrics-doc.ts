@@ -14,6 +14,10 @@ import { writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import type { Counter, Gauge, Histogram, Registry } from 'prom-client';
 import { allDeviceGauges, createDeviceMetrics } from '../src/metrics/device-metrics.ts';
+import {
+  allDeviceInventoryGauges,
+  createDeviceInventoryMetrics,
+} from '../src/metrics/inventory-metrics.ts';
 import { createRegistry } from '../src/metrics/registry.ts';
 import { createSelfMetrics } from '../src/metrics/self.ts';
 
@@ -40,15 +44,17 @@ function renderTable(metrics: AnyMetric[]): string {
 
 const registry: Registry = createRegistry(false);
 const deviceMetrics = createDeviceMetrics(registry);
+const deviceInventoryMetrics = createDeviceInventoryMetrics(registry);
 const selfMetrics = createSelfMetrics(registry);
 
 const deviceTable = renderTable(allDeviceGauges(deviceMetrics));
+const deviceInventoryTable = renderTable(allDeviceInventoryGauges(deviceInventoryMetrics));
 const selfTable = renderTable(Object.values(selfMetrics));
 
 const doc = `# Metric reference
 
-Generated from \`src/metrics/device-metrics.ts\` and \`src/metrics/self.ts\` by
-\`scripts/generate-metrics-doc.ts\`. Do not hand-edit the tables below —
+Generated from \`src/metrics/device-metrics.ts\`, \`src/metrics/inventory-metrics.ts\`, and
+\`src/metrics/self.ts\` by \`scripts/generate-metrics-doc.ts\`. Do not hand-edit the tables below —
 regenerate instead. For the full design rationale and the metric-surface
 stability contract, see [DESIGN.md](DESIGN.md).
 
@@ -59,6 +65,15 @@ emitted only when the corresponding upstream data is present for a device —
 never as zero, never as \`NaN\`.
 
 ${deviceTable}
+
+## Device inventory metrics (\`ftd_device_*\`, SCC only)
+
+From SCC's device inventory (DESIGN.md §14.6), on its own poll cadence independent of
+the health-metrics poll above — populated even for a device absent from every other
+\`ftd_*\` series (e.g. one SCC reports UNREACHABLE). Not available on the FMC backend,
+which has no equivalent inventory endpoint wired up.
+
+${deviceInventoryTable}
 
 ## Exporter self-metrics (\`ftd_exporter_*\`)
 

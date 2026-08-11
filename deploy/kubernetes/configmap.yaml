@@ -36,6 +36,11 @@ data:
   SCC_BASE_URL: "https://api.us.security.cisco.com/firewall" # pick your region
   SCC_FMC_UID: "" # UID of the cdFMC whose managed devices are polled
   SCC_TIME_RANGE: "5m"
+  # Device-inventory poll cadence (ftd_device_info/ftd_device_connectivity_up),
+  # independent of SCC_TIME_RANGE's health-metrics poll -- shares that
+  # request's spacing floor, so SCC's 2 requests/minute limit holds
+  # structurally regardless of this value.
+  SCC_INVENTORY_POLL_INTERVAL_SECONDS: "300"
 
   # --- Standalone on-prem FMC backend (BACKEND_TYPE=fmc) ---
   FMC_HOST: ""

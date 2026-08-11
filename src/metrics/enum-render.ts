@@ -1,7 +1,9 @@
 import {
   HA_NODE_STATUS_VALUES,
   HA_NODE_TYPE_VALUES,
+  KNOWN_INTERFACE_TYPE_VALUES,
   lowercaseEnumLabel,
+  REDUNDANCY_MODE_VALUES,
   TUNNEL_STATE_VALUES,
   tunnelStateLabel,
 } from '../domain/enums.ts';
@@ -78,6 +80,55 @@ export interface InfoEnumResult {
  */
 export function classifyHaNodeType(raw: string): InfoEnumResult {
   if ((HA_NODE_TYPE_VALUES as readonly string[]).includes(raw)) {
+    return { label: lowercaseEnumLabel(raw) };
+  }
+  return { label: 'unknown', unrecognizedRawValue: raw };
+}
+
+export interface PassthroughEnumResult {
+  /**
+   * Always equal to the raw upstream value, recognized or not. Unlike every
+   * other classifier in this module, an unrecognized value here is never
+   * coerced to a fallback label — `interface_type` is purely informational,
+   * not a state signal, and its rendered value is the versioned public API
+   * (DESIGN.md §13). Coercing an unrecognized-but-real value (e.g. a new
+   * hardware model's interface type) to "unknown" would be a breaking
+   * rendered-value change for anyone currently seeing that raw value.
+   */
+  label: string;
+  /** Set only when `raw` is outside `KNOWN_INTERFACE_TYPE_VALUES` — diagnostic only, never changes `label`. */
+  unrecognizedRawValue?: string;
+}
+
+/**
+ * Recognize-or-flag classification for `interface_type` (DESIGN.md §4.3).
+ * Closes the gap flagged by live SCC validation: `interface_type` was
+ * previously the only enum-shaped field with no vocabulary at all, so a new
+ * upstream value (e.g. `SubInterface`) could arrive with no diagnostic
+ * signal. This adds the diagnostic without touching the rendered label.
+ */
+export function classifyInterfaceType(raw: string): PassthroughEnumResult {
+  if (KNOWN_INTERFACE_TYPE_VALUES.includes(raw)) {
+    return { label: raw };
+  }
+  return { label: raw, unrecognizedRawValue: raw };
+}
+
+/**
+ * Classifies SCC device-inventory `connectivityState` (DESIGN.md §4.6.1).
+ * Same shape/rationale as `classifyBinaryEnum` — a distinct function because
+ * the raw vocabulary ("ONLINE"/"UNREACHABLE") differs from "UP"/"DOWN".
+ */
+export function classifyConnectivityState(raw: string | undefined): BinaryEnumResult {
+  if (raw === undefined) return { kind: 'absent' };
+  if (raw === 'ONLINE') return { kind: 'recognized', value: 1 };
+  if (raw === 'UNREACHABLE') return { kind: 'recognized', value: 0 };
+  return { kind: 'unrecognized', rawValue: raw };
+}
+
+/** Info-label classification for SCC device-inventory `redundancy_mode` (DESIGN.md §4.6.1) — same pattern as `classifyHaNodeType`. */
+export function classifyRedundancyMode(raw: string): InfoEnumResult {
+  if ((REDUNDANCY_MODE_VALUES as readonly string[]).includes(raw)) {
     return { label: lowercaseEnumLabel(raw) };
   }
   return { label: 'unknown', unrecognizedRawValue: raw };

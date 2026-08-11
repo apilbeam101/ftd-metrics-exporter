@@ -1,0 +1,128 @@
+{
+  "count": 3,
+  "limit": 50,
+  "offset": 0,
+  "items": [
+    {
+      "uid": "00000000-0000-4000-8000-000000000020",
+      "name": "ftd-appliance-02",
+      "deviceType": "CDFMC_MANAGED_FTD",
+      "connectorType": "CDG",
+      "address": "00000000-0000-4000-8000-000000000021DONTRESOLVE:443",
+      "deviceRoles": [],
+      "serial": "AAA0000000A",
+      "softwareVersion": "10.0.0",
+      "connectivityState": "UNREACHABLE",
+      "configState": "NOT_SYNCED",
+      "conflictDetectionState": "NO_CONFLICTS",
+      "ftdLicenses": ["ESSENTIALS", "MALWARE_DEFENSE", "IPS", "URL"],
+      "redundancyMode": "STANDALONE",
+      "uidOnFmc": "00000000-0000-4000-8000-000000000022",
+      "deviceRecordOnFmc": {
+        "uid": "00000000-0000-4000-8000-000000000022",
+        "link": "https://api.eu.security.cisco.com/firewall/api/fmc_config/v1/domain/00000000-0000-4000-8000-000000000023/devices/devicerecords/00000000-0000-4000-8000-000000000022"
+      },
+      "fmcAccessPolicy": {
+        "uid": "00000000-0000-4000-8000-000000000024",
+        "link": "https://api.eu.security.cisco.com/firewall/v1/cdfmc/api/fmc_config/v1/domain/00000000-0000-4000-8000-000000000023/policy/accesspolicies/00000000-0000-4000-8000-000000000024"
+      },
+      "modelNumber": "Cisco Firepower 1010 Threat Defense",
+      "hardwareModel": "Cisco Firepower 1000 Threat Defense",
+      "deviceMaintenanceWindow": {
+        "isOpen": true,
+        "currentStart": "2026-08-11T00:00:00Z",
+        "currentEnd": "2026-08-11T23:59:59Z",
+        "nextStart": "2026-08-12T00:00:00Z",
+        "nextEnd": "2026-08-12T23:59:59Z"
+      },
+      "complianceStatus": "IN_COMPLIANCE",
+      "licenseStatus": "LICENSED"
+    },
+    {
+      "uid": "00000000-0000-4000-8000-000000000010",
+      "name": "ftd-ha-primary",
+      "deviceType": "CDFMC_MANAGED_FTD",
+      "connectorType": "CDG",
+      "address": "00000000-0000-4000-8000-000000000025DONTRESOLVE:443",
+      "deviceRoles": [],
+      "serial": "BBB0000000B",
+      "softwareVersion": "10.0.0",
+      "connectivityState": "ONLINE",
+      "configState": "SYNCED",
+      "conflictDetectionState": "NO_CONFLICTS",
+      "ftdLicenses": ["SECURE_CLIENT_PREMIER", "ESSENTIALS", "MALWARE_DEFENSE", "IPS", "URL"],
+      "ftdPerformanceTier": "FTDv50",
+      "redundancyMode": "HA",
+      "ftdHaInfo": {
+        "haPairUid": "00000000-0000-4000-8000-000000000026",
+        "haPairName": "ftd-ha-pair",
+        "primaryNode": {
+          "name": "ftd-ha-node-a",
+          "serial": "BBB0000000B",
+          "softwareVersion": "10.0.0",
+          "uidOnFmc": "00000000-0000-4000-8000-000000000027",
+          "status": "NORMAL",
+          "role": "ACTIVE"
+        },
+        "secondaryNode": {
+          "name": "ftd-ha-node-b",
+          "serial": "CCC0000000C",
+          "softwareVersion": "10.0.0",
+          "uidOnFmc": "00000000-0000-4000-8000-000000000028",
+          "status": "NORMAL",
+          "role": "STANDBY"
+        },
+        "haNodeType": "PRIMARY"
+      },
+      "uidOnFmc": "00000000-0000-4000-8000-000000000027",
+      "deviceRecordOnFmc": {
+        "uid": "00000000-0000-4000-8000-000000000027",
+        "link": "https://api.eu.security.cisco.com/firewall/api/fmc_config/v1/domain/00000000-0000-4000-8000-000000000023/devices/devicerecords/00000000-0000-4000-8000-000000000027"
+      },
+      "fmcAccessPolicy": {
+        "uid": "00000000-0000-4000-8000-000000000024",
+        "link": "https://api.eu.security.cisco.com/firewall/v1/cdfmc/api/fmc_config/v1/domain/00000000-0000-4000-8000-000000000023/policy/accesspolicies/00000000-0000-4000-8000-000000000024"
+      },
+      "modelNumber": "Cisco Secure Firewall Threat Defense for KVM",
+      "hardwareModel": "Cisco Secure Firewall Threat Defense Virtual/ISA 3000",
+      "deviceMaintenanceWindow": {
+        "isOpen": true,
+        "currentStart": "2026-08-11T00:00:00Z",
+        "currentEnd": "2026-08-11T23:59:59Z",
+        "nextStart": "2026-08-12T00:00:00Z",
+        "nextEnd": "2026-08-12T23:59:59Z"
+      },
+      "complianceStatus": "IN_COMPLIANCE",
+      "licenseStatus": "LICENSED"
+    },
+    {
+      "uid": "00000000-0000-4000-8000-000000000030",
+      "name": "meraki-appliance-01",
+      "deviceType": "MERAKI_MX",
+      "connectorType": "CDG",
+      "deviceRoles": [],
+      "serial": "DDD0-EEEE-0000",
+      "connectivityState": "UNREACHABLE",
+      "configState": "SYNCED",
+      "conflictDetectionState": "NO_CONFLICTS",
+      "merakiDeploymentMode": "ROUTED",
+      "merakiNetwork": {
+        "id": "L_000000000000000000",
+        "name": "meraki-appliance-01"
+      },
+      "merakiPhysicalDevices": [
+        {
+          "serial": "DDD0-EEEE-0000",
+          "notes": "",
+          "model": "MX67W",
+          "wan1Ip": "203.0.113.1"
+        }
+      ],
+      "state": "DONE",
+      "stateMachineDetails": {
+        "identifier": "enableObjectServiceForDeviceStateMachine"
+      },
+      "modelNumber": "MX67W"
+    }
+  ]
+}

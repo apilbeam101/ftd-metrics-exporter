@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { createBackend } from './backend-factory.ts';
+import { createBackend, getSccDeviceInventoryReader } from './backend-factory.ts';
 import { HELP_TEXT, parseCli } from './cli.ts';
 import { loadConfig } from './config/load.ts';
 import { formatConfigSummary } from './config/redact-summary.ts';
@@ -9,6 +9,8 @@ import { createLifecycle } from './lifecycle.ts';
 import { createLogger } from './log/logger.ts';
 import { renderDeviceMetrics } from './metrics/collector.ts';
 import { createDeviceMetrics } from './metrics/device-metrics.ts';
+import { renderDeviceInventoryMetrics } from './metrics/inventory-collector.ts';
+import { createDeviceInventoryMetrics } from './metrics/inventory-metrics.ts';
 import { createRegistry } from './metrics/registry.ts';
 import { createSelfMetrics } from './metrics/self.ts';
 import { assertSupportedNodeVersion } from './node-version-check.ts';
@@ -138,6 +140,7 @@ async function main(): Promise<void> {
   }
 
   const deviceMetrics = createDeviceMetrics(registry);
+  const deviceInventoryMetrics = createDeviceInventoryMetrics(registry);
   const parseErrorTracker = createParseErrorTracker();
   const selfMetricsRecorder = createSelfMetricsRecorder(selfMetrics);
 
@@ -148,7 +151,20 @@ async function main(): Promise<void> {
     pollIntervalSeconds: config.pollIntervalSeconds,
     hooks: {
       onParseError: (error) => {
-        parseErrorTracker.record();
+        // `parseErrorTracker` feeds poller.ts's "did this cycle's HEALTH
+        // fetch resolve to zero devices only because parsing failed"
+        // check (`consumeSinceLastCycle()`, checked against the health
+        // snapshot count returned from `fetchSnapshot()`). A
+        // device-inventory parse error is unrelated to that count — SCC's
+        // device inventory is a genuinely separate upstream call, on its
+        // own cadence, and health legitimately can (and, for the very
+        // devices this feature exists to surface, does) resolve to zero
+        // devices on the same cycle. Feeding inventory errors into the
+        // same tracker would misclassify a healthy-but-empty health poll
+        // as a failure whenever inventory merely hiccuped.
+        if (error.group !== 'inventory') {
+          parseErrorTracker.record();
+        }
         selfMetricsRecorder.onParseError(error);
       },
       onRateLimitDeferral: selfMetricsRecorder.onRateLimitDeferral,
@@ -158,8 +174,13 @@ async function main(): Promise<void> {
       onTokenExpiryUpdate: selfMetricsRecorder.onTokenExpiryUpdate,
       onDiscoverySuccess: selfMetricsRecorder.onDiscoverySuccess,
       onDiscoveryFailure: selfMetricsRecorder.onDiscoveryFailure,
+      onInventoryError: selfMetricsRecorder.onSccInventoryError,
     },
   });
+  // `undefined` for FMC (DESIGN.md §4.6.1 — SCC-only) — see
+  // getSccDeviceInventoryReader's own doc comment for why the narrowing
+  // cast lives in backend-factory.ts rather than here.
+  const readDeviceInventory = getSccDeviceInventoryReader(backend);
 
   const server = createServer({
     bindAddress: config.metricsBindAddress,
@@ -169,7 +190,7 @@ async function main(): Promise<void> {
     isReady: () => cache.get() !== undefined,
     renderMetrics: () => {
       const entry = cache.get();
-      renderDeviceMetrics(
+      const healthResult = renderDeviceMetrics(
         {
           metrics: deviceMetrics,
           unknownEnumTotal: selfMetrics.unknownEnumTotal,
@@ -177,6 +198,19 @@ async function main(): Promise<void> {
         },
         entry?.snapshots ?? [],
       );
+      // ftd_exporter_series (DESIGN.md §11's cardinality tripwire) must
+      // reflect every ftd_* device series actually exposed, not just the
+      // health-snapshot ones — device inventory is a separate device count,
+      // not bounded by health/metrics. renderDeviceMetrics() already set
+      // this gauge to its own count above; this is the final word.
+      const inventoryResult =
+        readDeviceInventory !== undefined
+          ? renderDeviceInventoryMetrics(
+              { metrics: deviceInventoryMetrics, unknownEnumTotal: selfMetrics.unknownEnumTotal },
+              readDeviceInventory(),
+            )
+          : undefined;
+      selfMetrics.series.set(healthResult.seriesCount + (inventoryResult?.seriesCount ?? 0));
     },
     ...(config.metricsTls !== undefined && { tls: config.metricsTls }),
   });

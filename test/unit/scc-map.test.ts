@@ -174,3 +174,52 @@ test('a non-array payload is a root-level parse error, not a crash', () => {
   assert.equal(result.parseErrors.length, 1);
   assert.equal(result.parseErrors[0]?.group, 'root');
 });
+
+// --- HA pair: two devices sharing one deviceUid (confirmed live, 2026-08-11) ---
+//
+// SCC's own inventory models an HA pair as one logical device, and its
+// /health/metrics endpoint reuses that single UID for both nodes, so the
+// mapper receives two array entries with an identical deviceUid and must
+// treat them as two independent devices, not deduplicate them. Nothing in
+// mapSccResponse keys anything by deviceUid — it builds a plain array — but
+// this is the explicit regression test for that invariant, since a future
+// "optimization" that indexes by deviceUid would silently drop one HA peer's
+// entire metric set with no error anywhere.
+
+test('ha-pair.json: two array entries sharing a deviceUid map to two independent snapshots', () => {
+  const result = mapSccResponse(loadFixture('scc/ha-pair.json'));
+  assert.equal(result.snapshots.length, 2);
+  const [primary, secondary] = result.snapshots;
+  assert.ok(primary && secondary);
+  assert.equal(primary.deviceUid, secondary.deviceUid);
+  assert.notEqual(primary.deviceName, secondary.deviceName);
+  assert.equal(primary.deviceName, 'ftd-ha-primary');
+  assert.equal(secondary.deviceName, 'ftd-ha-secondary');
+});
+
+test('ha-pair.json: each peer maps its own independent HA role and CPU/memory data, not a shared or merged one', () => {
+  const result = mapSccResponse(loadFixture('scc/ha-pair.json'));
+  const primary = result.snapshots.find((d) => d.deviceName === 'ftd-ha-primary');
+  const secondary = result.snapshots.find((d) => d.deviceName === 'ftd-ha-secondary');
+  assert.ok(primary && secondary);
+  assert.equal(primary.ha?.nodeType, 'PRIMARY');
+  assert.equal(secondary.ha?.nodeType, 'SECONDARY');
+  assert.equal(primary.ha?.nodeStatus, 'NORMAL');
+  assert.equal(secondary.ha?.nodeStatus, 'NORMAL');
+  assert.notEqual(primary.cpu?.system, secondary.cpu?.system);
+});
+
+test('ha-pair.json: both peers map subinterfaces and the synthetic _all rollup as ordinary interfaces', () => {
+  const result = mapSccResponse(loadFixture('scc/ha-pair.json'));
+  const primary = result.snapshots.find((d) => d.deviceName === 'ftd-ha-primary');
+  assert.ok(primary);
+  assert.equal(primary.interfaces?.length, 8);
+  const subInterfaces = primary.interfaces?.filter((i) => i.interfaceType === 'SubInterface');
+  assert.equal(subInterfaces?.length, 3);
+  const all = primary.interfaces?.find((i) => i.interface === 'Ethernet1/2_all');
+  assert.ok(all);
+  // No interfaceName upstream, so the mapper's DESIGN.md §4.3 fallback sets
+  // it equal to the hardware id — same as any other unnamed interface.
+  assert.equal(all.interfaceName, 'Ethernet1/2_all');
+  assert.equal(all.interfaceType, 'Ethernet');
+});

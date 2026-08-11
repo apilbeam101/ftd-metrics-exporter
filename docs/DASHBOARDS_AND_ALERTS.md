@@ -2,8 +2,8 @@
 
 Two artifacts ship with the exporter:
 
-- [dashboards/ftd-health.json](../dashboards/ftd-health.json) — a Grafana dashboard (uid `ftd-health`), 35 panels across 8 rows.
-- [alerts/ftd-health.yaml](../alerts/ftd-health.yaml) — 13 Prometheus alerting rules.
+- [dashboards/ftd-health.json](../dashboards/ftd-health.json) — a Grafana dashboard (uid `ftd-health`), 37 panels across 8 rows.
+- [alerts/ftd-health.yaml](../alerts/ftd-health.yaml) — 14 Prometheus alerting rules.
 
 Both are starting points. The thresholds in particular (85% CPU, 90% memory, 90% disk) are defaults, not universal truths — a device that legitimately runs hot under normal load needs its own threshold rather than a permanently-firing alert.
 
@@ -109,6 +109,7 @@ The rule bodies transfer verbatim; only the enclosing `groups:` key moves under 
 | `FtdExporterStale` | warning | No successful poll for over 5m, despite having succeeded at least once |
 | `FtdExporterInsecureTls` | warning | `FMC_TLS_INSECURE_SKIP_VERIFY=true` is in effect (no `for` — it can't clear on its own) |
 | `FtdDeviceMetricsStale` | warning | One device's health window is over 15m old while others are current |
+| `FtdDeviceUnreachable` | critical | SCC only: device inventory reports UNREACHABLE for 10m — the only alert that can catch a device gone fully absent from health/metrics |
 | `FtdHighCpu` | warning | `component="system"` CPU above 85% for 15m |
 | `FtdHighMemory` | warning | `component="system"` memory above 90% for 15m |
 | `FtdDiskNearFull` | critical | Disk above 90% for 5m |
@@ -120,7 +121,9 @@ The rule bodies transfer verbatim; only the enclosing `groups:` key moves under 
 
 `FtdExporterDown` and `FtdExporterAbsent` are **not** redundant, and neither should be deleted as duplicative. They cover disjoint failures: the first means "running, but upstream polls are failing"; the second means "not answering at all." Only the second can fire once the process dies, because every `ftd_*` series ceases to exist at that moment and an instant-vector comparison against a nonexistent series matches nothing. That distinction was found by killing a real exporter against a real Prometheus and watching the entire alert set go silent.
 
-The last four rules produce no results at all on a fleet with no HA pair, no VPN, and no chassis hardware. That is correct, not misconfiguration — those metric groups are genuinely absent rather than zero on devices without the capability ([DESIGN.md §4.8](DESIGN.md)). An always-silent rule there means "not applicable to this fleet."
+The last three rules (`FtdHaNotNormal`, `FtdS2sTunnelDown`, `FtdChassisPsuFailure`) produce no results at all on a fleet with no HA pair, no VPN, and no chassis hardware. That is correct, not misconfiguration — those metric groups are genuinely absent rather than zero on devices without the capability ([DESIGN.md §4.8](DESIGN.md)). An always-silent rule there means "not applicable to this fleet."
+
+`FtdDeviceUnreachable` is a different kind of conditional: it produces no results on the **FMC backend** (which has no equivalent inventory endpoint wired up — [DESIGN.md §4.6.1](DESIGN.md)), not because of a device capability gap.
 
 ### Why the interface rules only cover named interfaces
 
@@ -128,21 +131,52 @@ The exporter exports every interface, including unused ones, and an unused inter
 
 ```promql
 ftd_interface_operational_up == 0
-  unless on(job, instance, device_uid, interface)
+  unless on(job, instance, device_uid, device_name, interface)
     label_replace(
-      max by (job, instance, device_uid, interface_name) (ftd_interface_operational_up),
+      max by (job, instance, device_uid, device_name, interface_name) (ftd_interface_operational_up),
       "interface", "$1", "interface_name", "(.*)"
     )
 ```
 
-`label_replace` copies `interface_name` over `interface`. For an unnamed interface the rewritten series has an identical `(device_uid, interface)` pair to the original, so `unless` removes it; for a named interface the pair differs and the original survives. To alert on unnamed interfaces too, drop the `unless` clause. The full rationale and the rejected alternatives are recorded in a comment above the rule.
+`label_replace` copies `interface_name` over `interface`. For an unnamed interface the rewritten series has an identical `(device_uid, device_name, interface)` pair to the original, so `unless` removes it; for a named interface the pair differs and the original survives. To alert on unnamed interfaces too, drop the `unless` clause. The full rationale and the rejected alternatives are recorded in a comment above the rule.
 
-Two pieces of that expression are load-bearing and should not be simplified away — both were added after a review found the naive form silently broken, and both have regression tests in [alerts/ftd-health.test.yaml](../alerts/ftd-health.test.yaml):
+Three pieces of that expression are load-bearing and should not be simplified away — all three were added after a review found an earlier form silently broken, and all three have regression tests in [alerts/ftd-health.test.yaml](../alerts/ftd-health.test.yaml):
 
 - **`max by (...)` on the right-hand side.** Because `label_replace` overwrites `interface`, two interfaces on one device that share an `interface_name` collapse to an identical labelset, and PromQL then aborts the *whole rule evaluation* with `vector cannot contain metrics with the same labelset` — silencing the rule for every device in the fleet, not just the colliding pair. The colliding interfaces don't even have to be down for that to happen. A named interface whose configured name happens to equal a sibling's hardware id is enough to trigger it.
 - **`job, instance` in the `unless on(...)` list.** Without them, two exporters scraping the same device (an HA/rollout overlap, or an FMC and an SCC exporter covering one fleet) match across instances, and the exporter reporting the hardware-id fallback suppresses the other's genuine alert.
+- **`device_name` in both lists (added 2026-08-11).** On SCC, both nodes of an HA pair share one `device_uid` ([DESIGN.md §14.14](DESIGN.md)), and HA config sync means both peers usually have the identical hardware-id layout too. Without `device_name`, an unnamed interface on one peer can fold together with — and suppress — a genuinely-down *named* interface on the other peer at the same hardware id. `device_name` is what actually disambiguates the two peers.
 
 **Known limitation:** an interface whose legitimately configured name is identical to its own hardware id (e.g. an interface actually named `Ethernet1/1`) is indistinguishable from the unnamed fallback case and will never alert. This is inherent to the construct — PromQL cannot compare two labels on the same series — and is the accepted cost of the noise-avoidance default. Rename such an interface, or drop the `unless` clause to alert on everything.
+
+### Two upstream quirks that affect any query you write yourself
+
+The dashboard and alert rules already account for both of these. They matter the moment you write
+a new panel or rule against `ftd_interface_*`/`ftd_*` metrics.
+
+**SCC synthesizes a `<parent>_all` pseudo-interface for a subinterfaced parent — it is a traffic
+rollup, not a real interface, and the real parent's own counters go to zero.** Confirmed live
+(2026-08-11) on a device with three subinterfaces on `Ethernet0/1`: `Ethernet0/1_all` reports the
+*sum* of `Ethernet0/1.10` + `Ethernet0/1.16` + `Ethernet0/1.25` (to within ±1, independent
+upstream-averaging rounding), while the physical `Ethernet0/1` itself reports **0 bytes in both
+directions**. It renders as an ordinary interface — full status/statistics set, `interface_type:
+"Ethernet"`, no distinguishing marker — so **any `sum()` you write across the `interface` label on
+a subinterfaced device double- or triple-counts that traffic**: once as the zeroed physical
+parent, once as `_all`, and once split across the subinterfaces. The shipped dashboard and alerts
+never `sum()` across `interface` (every interface panel/rule is per-series or `count()`-based), so
+this doesn't affect anything that ships — it only affects a throughput total you write yourself.
+`_all` also shows up as an entry in the `$interface` template variable; it's expected there, not a
+bug, since it *is* a real series with real (rollup) data.
+
+**On SCC, both nodes of an HA pair share one `device_uid` — only `device_name` differs.** Confirmed
+live (2026-08-11) against a real HA pair: SCC's `/health/metrics` gives each node's health data
+fully and correctly, but reuses the pair's single inventory-level UID for both, because SCC's own
+inventory models an HA pair as one logical device. Every panel and alert in this repo groups by
+`(device_uid, device_name)` together whenever it needs to count or distinguish *devices* — never
+`device_uid` alone — for exactly this reason (see `docs/DESIGN.md`'s device_uid caveat). If you
+write a new query that aggregates by `device_uid` to count distinct devices, add `device_name` to
+the grouping too, or an HA pair's two nodes silently collapse into one. Per-series queries (no
+aggregation across devices) are unaffected either way, since `device_name` is already present on
+every sample.
 
 ## Reading the dashboard
 

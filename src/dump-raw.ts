@@ -1,5 +1,6 @@
 import { createBackend } from './backend-factory.ts';
 import type { AppConfig } from './config/types.ts';
+import type { Clock } from './http/clock.ts';
 import { createRealClock } from './http/clock.ts';
 import type { Logger } from './log/logger.ts';
 import { Sanitizer, sanitize } from './util/sanitize.ts';
@@ -48,6 +49,14 @@ export interface DumpRawOptions {
   write?: (chunk: string) => void;
   /** Opt-out of sanitization, per the plan's "with an opt-out" note — the operator is asserting the capture is already safe to share raw. Defaults to `false` (sanitize). */
   skipSanitize?: boolean;
+  /**
+   * Test hook: defaults to `createRealClock()`. Since a real SCC backend
+   * now always makes two requests per cycle (health/metrics, then a
+   * device-inventory refresh — DESIGN.md §4.6.1), a real clock's real 30s
+   * spacing floor (DESIGN.md §3.2.4) between them makes every SCC test
+   * here take 30+ real seconds unless a test injects a fake clock instead.
+   */
+  clock?: Clock;
 }
 
 interface CapturedResponse {
@@ -213,7 +222,7 @@ export async function dumpRaw(options: DumpRawOptions): Promise<void> {
 
   const backend = createBackend({
     config: options.config,
-    clock: createRealClock(),
+    clock: options.clock ?? createRealClock(),
     logger: options.logger,
     pollIntervalSeconds: options.config.pollIntervalSeconds,
     hooks:

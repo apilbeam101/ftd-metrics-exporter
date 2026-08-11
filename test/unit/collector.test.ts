@@ -276,6 +276,67 @@ test('unknown enum: linkStatus FLAPPING omits the boolean and increments ftd_exp
   assert.equal(counterValue?.value, 1);
 });
 
+test('unknown enum: a novel interface_type renders the RAW value unchanged, not "unknown", but still increments the counter', async () => {
+  // Confirmed live against SCC (2026-08-11): interface_type is purely
+  // informational, and its rendered value is the versioned public API
+  // (DESIGN.md §13/§4.3) — unlike every other enum, an unrecognized value
+  // must never be coerced to a fallback label. The diagnostic counter still
+  // fires so a genuinely new upstream value is visible without changing what
+  // anyone currently sees.
+  const renderer = createTestRenderer();
+  const device: DeviceHealthSnapshot = {
+    deviceUid: 'device-a',
+    deviceName: 'ftd-a',
+    interfaces: [
+      {
+        interface: 'Port-channel1',
+        interfaceName: 'uplink',
+        interfaceType: 'VirtualPortChannel',
+        linkStatus: 'UP',
+      },
+    ],
+  };
+  renderer.render([device]);
+  const text = await renderer.text();
+  assert.doesNotMatch(text, /interface_type="unknown"/);
+  assert.match(text, /interface_type="VirtualPortChannel"/);
+
+  const counterValue = await renderer.unknownEnumTotal
+    .get()
+    .then((m) =>
+      m.values.find(
+        (v) => v.labels.metric === 'ftd_interface_type' && v.labels.value === 'virtualportchannel',
+      ),
+    );
+  assert.equal(counterValue?.value, 1);
+});
+
+test('unknown enum: every documented interface_type value increments no counter', async () => {
+  // Negative-side coverage for the same guard, mirroring the HA "already
+  // recognized literal" test below — SubInterface is the newest confirmed
+  // live value (2026-08-11 FTDv subinterface capture).
+  for (const raw of ['Ethernet', 'Management', 'SubInterface', 'GigabitEthernet']) {
+    const renderer = createTestRenderer();
+    const device: DeviceHealthSnapshot = {
+      deviceUid: 'device-a',
+      deviceName: 'ftd-a',
+      interfaces: [
+        {
+          interface: 'Ethernet1/1',
+          interfaceName: 'outside',
+          interfaceType: raw,
+          linkStatus: 'UP',
+        },
+      ],
+    };
+    renderer.render([device]);
+    await renderer.text();
+    const counterValues = await renderer.unknownEnumTotal.get();
+    assert.equal(counterValues.values.length, 0, `${raw} unexpectedly flagged as unrecognized`);
+    assert.match(await renderer.text(), new RegExp(`interface_type="${raw}"`));
+  }
+});
+
 test('unknown enum: an unrecognized HA node status sets status="unknown" active and increments the counter', async () => {
   const renderer = createTestRenderer();
   const device: DeviceHealthSnapshot = {

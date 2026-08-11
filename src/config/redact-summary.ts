@@ -59,6 +59,9 @@ export function formatConfigSummary(config: AppConfig): string {
     lines.push(formatLine('SCC_API_TOKEN', redactValue('SCC_API_TOKEN', backend.apiToken)));
     lines.push(formatLine('SCC_FMC_UID', backend.fmcUid));
     lines.push(formatLine('SCC_TIME_RANGE', backend.timeRange));
+    lines.push(
+      formatLine('SCC_INVENTORY_POLL_INTERVAL_SECONDS', backend.inventoryPollIntervalSeconds),
+    );
   } else {
     const backend = config.backend;
     lines.push(formatLine('FMC_HOST', backend.host));

@@ -80,7 +80,7 @@ Every variable is documented in full detail — including how to obtain each cre
 | `SCC_API_TOKEN` | Static bearer token from a dedicated, read-only, API-only SCC user. Shown once at creation — copy it immediately. |
 | `SCC_FMC_UID` | UID of the cloud-delivered FMC (cdFMC) whose devices you want polled. From the SCC inventory UI or `GET /v1/inventory/managers`. |
 
-Optional for SCC: `SCC_TIME_RANGE` (averaging window, defaults to `5m`).
+Optional for SCC: `SCC_TIME_RANGE` (averaging window, defaults to `5m`), `SCC_INVENTORY_POLL_INTERVAL_SECONDS` (device-inventory poll cadence for `ftd_device_info`/`ftd_device_connectivity_up`, defaults to `300`).
 
 ### Required — standalone FMC (`BACKEND_TYPE=fmc`)
 
@@ -144,8 +144,8 @@ Running into a problem? See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) �
 
 A Grafana dashboard and a set of Prometheus alerting rules ship with the exporter:
 
-- [dashboards/ftd-health.json](dashboards/ftd-health.json) — 35 panels across 8 rows, exporter health first. Import it as-is; it uses a `DS_PROMETHEUS` datasource variable rather than a hardcoded datasource uid.
-- [alerts/ftd-health.yaml](alerts/ftd-health.yaml) — 13 rules covering exporter health, staleness, resource pressure, interfaces, HA, VPN, and chassis PSUs.
+- [dashboards/ftd-health.json](dashboards/ftd-health.json) — 37 panels across 8 rows, exporter health first. Import it as-is; it uses a `DS_PROMETHEUS` datasource variable rather than a hardcoded datasource uid.
+- [alerts/ftd-health.yaml](alerts/ftd-health.yaml) — 14 rules covering exporter health, staleness, resource pressure, interfaces, device connectivity (SCC), HA, VPN, and chassis PSUs.
 
 Both assume Prometheus scrapes the exporter under the job name `ftd-metrics`. One rule (`FtdExporterAbsent`, the only one that can fire when the exporter process is dead) matches that job name explicitly — change it there if yours differs.
 

@@ -109,6 +109,103 @@ test('SCC: a full poll-cache-serve cycle populates the cache and /metrics reflec
   }
 });
 
+// --- Device inventory (DESIGN.md §4.6.1): end-to-end through the real production wiring, not just the render function directly ---
+//
+// Review finding: the unit tests for renderDeviceInventoryMetrics all call
+// it directly, so a regression in the actual wiring (getSccDeviceInventoryReader
+// -> the `if` guard in index.ts's renderMetrics closure) would pass the whole
+// suite while ftd_device_info/ftd_device_connectivity_up never reached a real
+// scrape. This drives it through createTestApp exactly as src/index.ts wires
+// it, via a real HTTP round trip to /metrics.
+
+test('SCC: device inventory (ftd_device_info / ftd_device_connectivity_up) reaches a real /metrics scrape through the production wiring, independent of health/metrics', async () => {
+  const server = await startTestHttpServer((req, res) => {
+    if (req.url?.startsWith('/v1/inventory/devices')) {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          items: [
+            {
+              name: 'ftd-online',
+              uid: 'u1',
+              deviceType: 'CDFMC_MANAGED_FTD',
+              connectivityState: 'ONLINE',
+              redundancyMode: 'STANDALONE',
+            },
+            {
+              name: 'ftd-offline',
+              uid: 'u2',
+              deviceType: 'CDFMC_MANAGED_FTD',
+              connectivityState: 'UNREACHABLE',
+            },
+            { name: 'meraki-01', uid: 'u3', deviceType: 'MERAKI_MX' },
+          ],
+        }),
+      );
+      return;
+    }
+    // Health/metrics: deliberately empty -- this is exactly the scenario
+    // that motivated the feature. Neither ftd-online nor ftd-offline
+    // appears here at all.
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end('[]');
+  });
+
+  const metrics = createTestMetrics(createRealClock());
+  const backend = createSccAdapter({
+    baseUrl: `http://127.0.0.1:${server.port}`,
+    apiToken: new Secret('a-realistic-looking-scc-token'),
+    fmcUid: 'fmc-uid-1',
+    timeRange: '5m',
+    clock: createRealClock(),
+    logger: (await import('../../src/log/logger.ts')).createLogger({
+      level: 'error',
+      sink: () => {},
+    }),
+    minSpacingMs: 0,
+    dispatcher: new Agent({ connect: { rejectUnauthorized: true } }),
+    inventoryPollIntervalSeconds: 300,
+  });
+
+  const app = await createTestApp({ backend, metrics, pollIntervalSeconds: 0.05 });
+  try {
+    await app.waitForCycles(1);
+    const res = await app.scrape();
+    assert.equal(res.statusCode, 200);
+
+    // Present despite health/metrics reporting zero devices.
+    assert.match(
+      res.body,
+      /ftd_device_info\{device_uid="u1",device_name="ftd-online",redundancy_mode="standalone"\} 1/,
+    );
+    assert.match(
+      res.body,
+      /ftd_device_connectivity_up\{device_uid="u1",device_name="ftd-online"\} 1/,
+    );
+    assert.match(
+      res.body,
+      /ftd_device_connectivity_up\{device_uid="u2",device_name="ftd-offline"\} 0/,
+    );
+    // The Meraki entry must never appear.
+    assert.ok(!res.body.includes('meraki-01'));
+    // ftd_exporter_devices (health-based) reads 0, while the inventory
+    // metrics above prove the fleet is not actually empty -- exactly the
+    // Finding 3 gap this feature closes.
+    assert.match(res.body, /ftd_exporter_devices 0/);
+    // The cardinality tripwire must count the inventory series too (review
+    // finding: it previously only counted health-snapshot series, so this
+    // would have read 0 despite 4 ftd_device_* series being on the page).
+    assert.match(
+      res.body,
+      /ftd_exporter_series 4/,
+      '2x ftd_device_info + 2x ftd_device_connectivity_up (Meraki excluded, health snapshot empty)',
+    );
+  } finally {
+    await app.stop();
+    await server.close();
+  }
+});
+
 // --- Testing step 2: full cycle, FMC (token acquisition -> discovery -> fan-out -> merged snapshot -> scrape) ---
 
 test('FMC: token acquisition, discovery, N-device fan-out, and a merged snapshot all reach /metrics', async () => {

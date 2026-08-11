@@ -494,7 +494,7 @@ Consequences accepted deliberately:
 
 - **This document does not invent FMC response field names.** Where SCC's schema is stated concretely ([Appendix B](#appendix-b-confirmed-scc-response-schema)) it is because it was verified against a live API call. For FMC, `CPU`/`MEM`/`DISK_STATS`/`INTERFACE` are now equally verified ([Appendix C](#appendix-c-confirmed-fmc-response-schema-partial)); fabricating plausible-looking field names for the remaining unverified groups would still be worse than admitting the gap.
 - **`INTERFACE` on FMC is verified, and diverges from SCC's naming in ways that would have broken a naive port.** The wrapper key is `interfaceHealthMetricsList`, not SCC's `interfaceHealthMetrics`; the status fields are `currentLinkStatus`/`currentOperationalStatus`, not SCC's `linkStatus`/`operationalStatus`. See [Appendix C](#appendix-c-confirmed-fmc-response-schema-partial) for the full field-by-field comparison.
-- **The `chassisStatsHealthMetrics`, `haHealthMetrics`, `raVpnSessionHealthMetrics`, and `s2sVpnTunnelHealthMetrics` groups remain experimental on *both* backends, not an FMC-specific gap.** Their field names come from Cisco's documentation only — confirmed absent (correctly, as keys) on live hardware on both SCC and FMC, but never observed populated with real chassis/HA/VPN data on either backend. Semantic versioning implications in [§13](#13-repository-hygiene-and-release-process).
+- **The `chassisStatsHealthMetrics`, `raVpnSessionHealthMetrics`, and `s2sVpnTunnelHealthMetrics` groups remain experimental on *both* backends, not an FMC-specific gap.** Their field names come from Cisco's documentation only — confirmed absent (correctly, as keys) on live hardware on both SCC and FMC, but never observed populated with real chassis/VPN data on either backend. Semantic versioning implications in [§13](#13-repository-hygiene-and-release-process). **`haHealthMetrics` is no longer in this category on SCC** — confirmed live-verified against a real HA pair (2026-08-11, see [Appendix B](#appendix-b-confirmed-scc-response-schema) and [§14.14](#1414-device_uid-is-not-stable-across-an-scc-ha-pair)). It remains unverified on FMC.
 - **Mitigation: a capture mode.** A documented one-shot debug mode (e.g. `--dump-raw`, writing raw upstream JSON to stdout) lets a customer or maintainer capture real FMC responses safely and contribute them as test fixtures without sharing credentials. This turns the unknown into a community-solvable problem and is a genuinely valuable OSS affordance. Raw dumps must pass through the same redaction path and the docs must warn that dumps may contain device names and topology detail.
 
 #### 3.3.6 TLS and certificate trust
@@ -585,6 +585,8 @@ ftd_disk_usage_ratio{{d}}                                   gauge, 0–1
 
 **All interfaces are exported, unconditionally.** The live sample confirmed that every interface appears — including fully unused ones (`Ethernet1/6` through `Ethernet1/8`, all DOWN, all-zero counters, several with no `interfaceName`). Filtering them would be wrong: "down interface with zero traffic" is signal, and suppressing it makes a genuinely removed interface indistinguishable from an idle one.
 
+**Subinterfaces and the synthetic `<parent>_all` rollup — confirmed live, 2026-08-11 (an FTDv with three subinterfaces on one physical parent):** a subinterface (`Ethernet1/2.10`) is exported like any other interface, with `interface_type: "SubInterface"`. SCC additionally synthesizes a `<parent>_all` entry (`Ethernet1/2_all`) alongside the physical parent — a genuine, separate series reporting the **sum of the subinterfaces' traffic**, not a real interface. Meanwhile the **physical parent's own counters go to zero** once subinterfaces exist — all of that device's traffic on that physical port is represented three times: once as the (zeroed) parent, once as `_all` (the total), and once split across the subinterfaces. Exported as-is, undistinguished from a real interface, because suppressing or relabeling it would be a metric-surface change ([§13](#13-repository-hygiene-and-release-process)) and the rollup is genuinely useful as a per-parent total — but it means **any `sum()` across the `interface` label on a subinterfaced device double- or triple-counts traffic.** Nothing shipped does this (every interface panel/alert in `dashboards/`/`alerts/` is per-series or `count()`-based); see [docs/DASHBOARDS_AND_ALERTS.md](DASHBOARDS_AND_ALERTS.md) for the operator-facing warning.
+
 **Chassis** (conditional — chassis-based hardware only; confirmed entirely absent on a single-appliance FTD 1010):
 
 ```
@@ -625,12 +627,12 @@ Worst-case cardinality: 1000 tunnels × 3 states × devices. Acceptable for a fi
 
 | Label | Applied to | Notes |
 |---|---|---|
-| `device_uid` | **Every** `ftd_*` metric | Stable identifier; the join key |
-| `device_name` | **Every** `ftd_*` metric | Human-readable; **mutable** — a rename creates a new series |
+| `device_uid` | **Every** `ftd_*` metric | Stable identifier; the join key. **Caveat (confirmed live, 2026-08-11):** on SCC, both nodes of an HA pair share one `device_uid` — see [§14.14](#1414-device_uid-is-not-stable-across-an-scc-ha-pair). Any query meant to count or distinguish *devices* must group by `(device_uid, device_name)` together, never `device_uid` alone |
+| `device_name` | **Every** `ftd_*` metric | Human-readable; **mutable** — a rename creates a new series. On SCC this is what actually disambiguates an HA pair's two nodes, since `device_uid` does not |
 | `component` | CPU, memory | `lina` \| `snort` \| `system` |
 | `interface` | Interface metrics | Hardware id, e.g. `Ethernet1/1`. Always present |
 | `interface_name` | Interface metrics | Human label, e.g. `outside`. **Optional upstream** — falls back to the `interface` value |
-| `interface_type` | Interface metrics | e.g. `Ethernet`, `Management` |
+| `interface_type` | Interface metrics | Confirmed live: `Ethernet`, `Management`, `SubInterface` (SCC, 2026-08-11 FTDv/subinterface capture); `GigabitEthernet` documented on FMC, not yet live-verified. **Not subject to the §4.4 unrecognized→`"unknown"` rule** — see that section's carve-out |
 | `fan`, `psu` | Chassis metrics | Numeric index as a string |
 | `status`, `state` | State-set metrics | Lowercased enum value |
 | `node_type` | `ftd_ha_node_info` | `primary` \| `secondary` |
@@ -668,6 +670,7 @@ Prometheus has no native enum type, and the wrong choice here is hard to undo. T
   This makes `ftd_ha_node_status{status="error"} == 1` a direct alerting expression, keeps every possible state visible in Grafana even when currently inactive, and requires no legend.
 - **Purely informational attributes → an `_info`-suffixed gauge always equal to 1**, carrying the attributes as labels (`ftd_ha_node_info{node_type="primary"} 1`). The standard Prometheus info-metric convention, joinable via `group_left`.
 - **Unrecognized enum values** map to `status="unknown"` (for state sets and `_info` labels alike — an `_info` gauge is still emitted, since it is informational rather than a health check, but the label value itself is bounded the same way) or are omitted (for booleans), and increment `ftd_exporter_unknown_enum_total{metric,value}` — so a new Cisco enum value shows up as a metric rather than as silently wrong data or an unbounded label. This is cheap insurance against an upstream API change, and applies uniformly across every enum-shaped field, informational or not — a 2026-08-04 audit found `ftd_ha_node_info`'s `node_type` label had been left minting the raw upstream value directly instead of falling back to `unknown` like every other enum here.
+- **Carve-out: `interface_type` never coerces an unrecognized value to `"unknown"`** (added 2026-08-11, when SCC's live `SubInterface` value exposed that this field had no vocabulary at all). Every other rule in this section holds because its enum is a bounded *state signal* — `interface_type` is purely informational and genuinely open-ended across hardware models (`Ethernet`, `Management`, `SubInterface`, `GigabitEthernet`, and plausibly more). Coercing a real-but-unrecognized value (a new hardware model's type) to `"unknown"` would silently change what an operator currently sees for that value — a metric-surface break under [§13](#13-repository-hygiene-and-release-process)'s semver contract, for a label whose whole value is that it passes upstream data through unchanged. The diagnostic still fires (`ftd_exporter_unknown_enum_total{metric="ftd_interface_type",...}`), so a genuinely new value is still visible — just never at the cost of changing rendered output. `redundancy_mode` ([§4.6.1](#461-device-inventory-ftd_device_-scc-only)) is not exempted the same way: it is a bounded state descriptor (`STANDALONE`/`HA`), not an open-ended passthrough field, so it follows the standard rule above.
 
 ### 4.5 Sample-window timestamps
 
@@ -704,9 +707,10 @@ Priority framing: **CPU, memory, disk, and interface are the baseline criteria**
 | RA VPN aggregate session counts | SCC + FMC | **Yes (conditional)** | Zero extra cost on SCC. **Only if RA VPN configured** |
 | S2S VPN tunnel state | SCC + FMC | **Yes (conditional)** | Zero extra cost on SCC. **Only if S2S VPN configured.** Highest-cardinality v1 series |
 | Sample-window timestamps | SCC (+FMC if available) | **Yes** | Enables per-device staleness alerting |
+| Device connectivity + redundancy mode (`connectivityState`, `redundancyMode`) | SCC `/v1/inventory/devices` | **Yes** | Built (2026-08-11): `ftd_device_info`/`ftd_device_connectivity_up`, on their own poll cadence. See [§4.6.1](#461-device-inventory-ftd_device_-scc-only) |
 | Exporter self-metrics | Both | **Yes** | See [§11](#11-observability-of-the-exporter-itself) |
 | **Smart License status** (`regStatus`, `authStatus`, `evalExpiresInDays`) | SCC `/license/smartlicenses` | **v1.1** | Directly actionable — license compliance alerting. Separate request, so a real (if small) cost. Strong candidate for the first post-v1 addition |
-| **Device inventory / connectivity state** (`connectivityState`, `configState`, `conflictDetectionState`, `softwareVersion`, `serial`, `licenseStatus`, `complianceStatus`, `ftdPerformanceTier`, `redundancyMode`, `snortVersion`/`vdbVersion`/`geoDbVersion`/`sruVersion`) | SCC `/v1/inventory/devices` | **v1.1** | High value as an `ftd_device_info` metric plus connectivity gauges. Separate request; needs a cardinality-conscious split between info labels and gauges |
+| **Remaining device inventory fields** (`configState`, `conflictDetectionState`, `softwareVersion`, `serial`, `licenseStatus`, `complianceStatus`, `ftdPerformanceTier`, `snortVersion`/`vdbVersion`/`geoDbVersion`/`sruVersion`) | SCC `/v1/inventory/devices` | **v1.1** | `connectivityState`/`redundancyMode` from this same endpoint are already built (row above) — these are the remaining fields, arriving free on the same request. Not modeled yet since none were part of the live capture that motivated the v1 subset (an unreachable device invisible to health/metrics needed only connectivity + identity, not the full record) |
 | **Certificate expiry** (`certificateExpiryDate`, `raVpnCertificateExpiryDate`) | SCC `/v1/inventory/devices` | **v1.1** | Excellent proactive alerting value as `ftd_certificate_expiry_timestamp_seconds`, queryable as days-remaining. Arrives free with the inventory call |
 | **Health alerts/events as status gauges** | FMC `/health/alerts`, `/health/events` | **Backlog** | Natural per-module `up`/`down` gauge or event-count metric. Needs a cardinality assessment for module/severity combinations |
 | **FMC-appliance-level health** (device UUID `0`) | FMC | **Backlog** | Distinct from managed-device health; needs its own label design to avoid conflation |
@@ -722,6 +726,25 @@ Priority framing: **CPU, memory, disk, and interface are the baseline criteria**
 | **`ftd_manager_info` + version-gated field mapping** (labels the managing FMC/SCC version so a field-name divergence across Cisco releases is queryable rather than silently mismapped) | Both | **v1.1** | Motivated directly by [§14.1](#141-standalone-fmc-response-body-field-names--resolved-for-all-five-metric-families)'s undocumented-field-name risk — a version label lets a future mapping bug be correlated to a specific FMC release instead of discovered blind |
 | **NTP sync status / clock drift** | FMC (endpoint unconfirmed) | **Backlog** | Cisco API feasibility unverified — no endpoint has been checked against a live appliance |
 | **Temperature / voltage / power-alarm sensors** | FMC (endpoint unconfirmed) | **Backlog** | Cisco API feasibility unverified — plausible chassis-adjacent data, not confirmed to exist in any response schema checked so far |
+
+### 4.6.1 Device inventory (`ftd_device_*`, SCC only)
+
+Built 2026-08-11, closing the gap [§14.14](#1414-device_uid-is-not-stable-across-an-scc-ha-pair) documents: a device SCC reports as fully `UNREACHABLE` is **silently absent from `/health/metrics` entirely** — no error, no series, nothing — so nothing in the v1 metric set above could ever detect it going offline. `GET /v1/inventory/devices` is the only signal that still lists it.
+
+```
+ftd_device_info{{d},redundancy_mode="standalone|ha|unknown"}   gauge, always 1
+ftd_device_connectivity_up{{d}}                                gauge 1/0
+```
+
+- **On its own poll cadence** (`SCC_INVENTORY_POLL_INTERVAL_SECONDS`, default 300s), independent of the health-metrics poll — connectivity/redundancy data changes far less often, and the two calls share the same 30s spacing guard (§3.2.4), so the combined request rate never risks the 2 requests/minute limit regardless of either cadence.
+- **Filtered to `deviceType == "CDFMC_MANAGED_FTD"`** — the same response also returns non-FTD entries (a `MERAKI_MX` device, in the live capture that found this). Without the filter, a Meraki appliance would render as a permanently-"unreachable" phantom FTD forever.
+- **`redundancy_mode` follows the standard state/info-enum rule** ([§4.4](#44-representing-status-enums)): an unrecognized value falls back to `"unknown"` and increments the diagnostic counter, unlike `interface_type` ([§4.3](#43-label-strategy)'s carve-out) — `redundancyMode` is a bounded state descriptor (`STANDALONE`/`HA`, confirmed live), not an unbounded informational passthrough.
+- **A failed refresh keeps the previous list and never fails the health poll**, and vice versa — the two are fully independent upstream calls; a hiccup in one must not be conflated with the other. `ftd_exporter_scc_inventory_errors_total` covers the inventory side.
+- **Wire gotcha, caught only by a live smoke test after this was first built against an incorrect assumption:** this endpoint's device-identifier field is named `uid`, not `deviceUid` like `/health/metrics` — same value, different key. Don't assume the two endpoints share a field name without checking a live capture.
+- **The HA 1-row-vs-2-row mismatch** ([§14.14](#1414-device_uid-is-not-stable-across-an-scc-ha-pair)) is directly visible here: an HA pair is **one** row in this response (`redundancy_mode="ha"`) but **two** rows in `/health/metrics` sharing that pair's `device_uid`. `count(ftd_device_info)` will therefore read one lower than `ftd_exporter_devices` for every HA pair in the fleet — expected, not a bug.
+- **`FtdDeviceUnreachable`** (`alerts/ftd-health.yaml`) is the alert this unblocks — the only rule that can catch a device going fully offline on SCC, since `FtdDeviceMetricsStale` requires a series that no longer exists once a device is `UNREACHABLE`.
+- **FMC has no equivalent wired up.** Whether FMC's device-identity model has the same HA-sharing behavior as SCC is unconfirmed — see [§14.14](#1414-device_uid-is-not-stable-across-an-scc-ha-pair).
+- **Accepted limitation: no staleness signal for the inventory cache itself.** If the inventory *endpoint* fails persistently while health/metrics keeps succeeding, `ftd_device_connectivity_up` silently serves last-known values indefinitely — there is no `ftd_exporter_scc_inventory_*_seconds` analogue to `ftd_exporter_cache_age_seconds`, and no alert on `ftd_exporter_scc_inventory_errors_total` itself. This is consistent with the pre-existing, equally-unalerted `ftd_exporter_discovery_errors_total` on the FMC side, not a new asymmetry this feature introduced — but it does mean a device that goes `UNREACHABLE` *after* the inventory endpoint has broken will not trip `FtdDeviceUnreachable` either. Revisit if this proves operationally significant.
 
 ### 4.7 Explicitly excluded from scope
 
@@ -954,6 +977,7 @@ Every variable below appears in the checked-in **`example.env`** with a blank or
 | `SCC_API_TOKEN` | Static bearer token. **Obtain via:** SCC UI → Settings → User Management → "+" → name the user → check "API Only User" → select **Read-only** (least privilege) → OK → **Generate API Token**. Shown **once** — copy immediately | **Yes** | — | *(blank)* |
 | `SCC_FMC_UID` | UID of the cloud-delivered FMC whose managed devices are polled. **Obtain via:** the SCC inventory UI or `GET /v1/inventory/managers` | **Yes** | — | `00000000-0000-0000-0000-000000000000` |
 | `SCC_TIME_RANGE` | Averaging window requested upstream: `5m` \| `15m` \| `30m` \| `1h`. **This value genuinely reaches the request** | No | `5m` | `5m` |
+| `SCC_INVENTORY_POLL_INTERVAL_SECONDS` | Device-inventory poll cadence ([§4.6.1](#461-device-inventory-ftd_device_-scc-only)), independent of `SCC_TIME_RANGE`'s health-metrics poll. Shares the health-metrics request's spacing guard, so the 2 req/min limit holds structurally regardless of this value | No | `300` | `300` |
 
 ### 8.3 Standalone FMC backend (required when `BACKEND_TYPE=fmc`)
 
@@ -1193,6 +1217,7 @@ A companion `alerts/ftd-health.yaml` of Prometheus alerting rules is a recommend
 | `FtdHaNotNormal` | `ftd_ha_node_status{status="normal"} == 0` for 5m | critical |
 | `FtdS2sTunnelDown` | `ftd_s2s_tunnel_state{state="down"} == 1` for 10m | warning |
 | `FtdChassisPsuFailure` | `ftd_chassis_psu_input_up == 0 or ftd_chassis_psu_output_up == 0` | critical |
+| `FtdDeviceUnreachable` | `ftd_device_connectivity_up == 0` for 10m (SCC only — [§4.6.1](#461-device-inventory-ftd_device_-scc-only)). The only rule that can catch a device gone fully absent from health/metrics | critical |
 | `FtdExporterInsecureTls` | `ftd_exporter_tls_verification_disabled == 1` | warning |
 
 Interface-down alerting should default to interfaces with a real `interface_name` (i.e. configured/named ones), since unused interfaces are legitimately down and would otherwise generate constant noise — a direct and predictable consequence of exporting all interfaces.
@@ -1219,6 +1244,7 @@ The exporter exposes its own metrics on the **same `/metrics` endpoint**, under 
 | `ftd_exporter_devices` | gauge | Devices in the current snapshot. A sudden drop signals a discovery or pagination bug |
 | `ftd_exporter_devices_discovered` | gauge | FMC backend: devices found by discovery. Compare against `_devices` to spot per-device failures |
 | `ftd_exporter_discovery_errors_total` | counter | FMC backend: discovery failures |
+| `ftd_exporter_scc_inventory_errors_total` | counter | SCC backend: device-inventory poll failures ([§4.6.1](#461-device-inventory-ftd_device_-scc-only)). The previous inventory list is kept on failure |
 | `ftd_exporter_series` | gauge | Series currently rendered. Cardinality tripwire, especially for S2S tunnels |
 | `ftd_exporter_parse_errors_total` | counter | Labels: `group`. Schema drift in the upstream API becomes visible instead of silent |
 | `ftd_exporter_unknown_enum_total` | counter | Labels: `metric`, `value`. Catches new Cisco enum values ([§4.4](#44-representing-status-enums)) |
@@ -1305,7 +1331,7 @@ Called out because this project ships to third parties, who will judge whether t
 - **Major:** renaming or removing a metric or label; renaming or removing an env var; raising the Node floor.
 - **Minor:** new metrics, new optional env vars, new backend capabilities.
 - **Patch:** bug fixes that do not change the metric surface.
-- **The `chassisStatsHealthMetrics`, `haHealthMetrics`, `raVpnSessionHealthMetrics`, and `s2sVpnTunnelHealthMetrics` groups are documented as experimental in 1.x on both backends**, meaning their metric names may change in a minor release while their response mapping is validated against real deployments ([§3.3.5](#335-known-unknown-response-body-field-names)). Stating this up front is honest and preserves the ability to fix mistakes; discovering the need for it after 1.0 would be painful. CPU, memory, disk, and interface metrics are stable on both backends as of this verification.
+- **The `chassisStatsHealthMetrics`, `raVpnSessionHealthMetrics`, and `s2sVpnTunnelHealthMetrics` groups remain documented as experimental in 1.x on both backends**, meaning their metric names may change in a minor release while their response mapping is validated against real deployments ([§3.3.5](#335-known-unknown-response-body-field-names)). Stating this up front is honest and preserves the ability to fix mistakes; discovering the need for it after 1.0 would be painful. CPU, memory, disk, and interface metrics are stable on both backends as of this verification. **`haHealthMetrics` graduated out of this list on SCC** (validated against a real HA pair, 2026-08-11) but remains experimental on FMC, where it is still unverified — see [§14.14](#1414-device_uid-is-not-stable-across-an-scc-ha-pair) for the backend-asymmetry question this raised.
 - Pre-1.0 releases (`0.x`) during initial development, with 1.0 cut once the SCC backend is validated in at least one third-party deployment.
 - Releases are **tagged, with GitHub Releases carrying changelog entries**, and CI publishes the npm package and container image with provenance ([§9.7](#97-dependency-and-supply-chain-hygiene)).
 
@@ -1376,7 +1402,7 @@ The design assumes a metric group not collected by health policy is **absent** (
 
 v1 runs one backend and one target per process ([§2.3](#23-backend-adapter-abstraction)). Whether operators need multiple FMC UIDs, multiple FMC hosts, or mixed backends in a single instance is unknown. **Deferred pending user feedback.** The adapter abstraction makes it additive rather than a rewrite, but it would require a config-file format (env vars scale poorly to N targets) and per-target rate-limit accounting.
 
-**On the comparable-exporter pattern for this (`fortigate_exporter`'s stateless `/probe`):** that exporter (and the wider `blackbox_exporter`-style family) handles "one exporter process, many targets" by taking the target as a query parameter on a stateless `/probe` endpoint — Prometheus's own scrape config fans out to N targets, and the exporter dials whichever one is named per-request, with no server-side polling loop at all. **That pattern is directly incompatible with this exporter's architecture** and not a viable path here: the entire poll-cache-serve design ([§2.2](#22-the-core-architectural-pattern-poll-cache-serve)) exists specifically because SCC's 2-requests/minute limit cannot tolerate a live upstream call per scrape, and a stateless `/probe` is by definition a live call per scrape. The real gap this project has is **multi-*manager*** (more than one FMC UID or FMC host under one exporter process), not multi-target-per-scrape — and the correct-shaped solution, if built, is **cached multi-target**: the existing poll-cache-serve loop generalized to poll N managers on their own schedules into N cache entries, with `/metrics` still serving from cache and still making zero upstream calls in the request path. This is a variant of the "additive, not a rewrite" framing above, not a new architecture.
+**On the comparable-exporter pattern for this (`fortigate_exporter`'s stateless `/probe`):** that exporter (and the wider `blackbox_exporter`-style family) handles "one exporter process, many targets" by taking the target as a query parameter on a stateless `/probe` endpoint — Prometheus's own scrape config fans out to N targets, and the exporter dials whichever one is named per-request, with no server-side polling loop at all. **That pattern is directly incompatible with this exporter's architecture** and not a viable path here: the entire poll-cache-serve design ([§2.2](#22-the-poll-cache-serve-pattern-central-design-decision)) exists specifically because SCC's 2-requests/minute limit cannot tolerate a live upstream call per scrape, and a stateless `/probe` is by definition a live call per scrape. The real gap this project has is **multi-*manager*** (more than one FMC UID or FMC host under one exporter process), not multi-target-per-scrape — and the correct-shaped solution, if built, is **cached multi-target**: the existing poll-cache-serve loop generalized to poll N managers on their own schedules into N cache entries, with `/metrics` still serving from cache and still making zero upstream calls in the request path. This is a variant of the "additive, not a rewrite" framing above, not a new architecture.
 
 ### 14.8 High availability and leader election
 
@@ -1406,6 +1432,20 @@ A 2026-08-04 naming-conventions audit (checked against [prometheus.io/docs/pract
 - **For keeping `_percent`:** upstream Cisco fields are natively 0–100 (`linaUsageAvg: 19` means 19%), so `_percent` keeps the mapping visually auditable against the raw API response, and avoids introducing a division that could itself have a unit bug.
 
 **Decision: converted to `_ratio`, 0–1.** The division happens exactly once, at the `collector.ts` render-time `set()` call site, which is the same place every other unit-bearing field is already finalized — so it does not introduce a new class of bug, only a single well-tested arithmetic step. This was decided pre-1.0 (see [§13](#13-repository-hygiene-and-release-process)'s metric-surface stability contract), while the rename is still free.
+
+### 14.14 `device_uid` is not stable across an SCC HA pair
+
+Confirmed live (2026-08-11) against a real SCC HA pair: `/health/metrics` gives **both** nodes of the pair the **same `device_uid`**, distinguished only by `device_name` and `haHealthMetrics.nodeType`. This directly contradicts the join-key framing in [§4.3](#43-label-strategy)'s label table — now corrected there with an explicit caveat.
+
+**Root cause, confirmed against `/v1/inventory/devices`:** SCC's own inventory model treats an HA pair as **one logical device** (one row, `redundancyMode: "HA"`, one `uid`). `/health/metrics` needs per-node granularity (CPU/memory/disk/interfaces are genuinely per-appliance, not per-pair) but has no separate per-node identifier to hand out, so it reuses the pair's single inventory UID for both nodes.
+
+**What this does and does not break, verified rather than assumed:**
+
+- **No exporter code path dedupes by `device_uid` alone.** `mapSccResponse` builds a plain array; `collector.ts`'s cardinality tripwire keys off the full rendered label set. Confirmed empirically: both peers' complete metric sets render as fully independent series.
+- **The `FtdInterfaceDown`/`FtdInterfaceErrors` named-interface filter (§10.3) was first verified against the *symmetric* HA case** — a real `promtool` run against both peers sharing one `device_uid`, identical interface config from HA sync, one peer's named interface down — and fired correctly for only the affected peer. A follow-up adversarial review then constructed the *asymmetric* case the symmetric one couldn't reach: one peer's interface genuinely named, the other peer's interface at the same hardware id left unnamed (a plausible config-sync-lag state, not just a contrived one). That case **did** leak — the unnamed peer's fallback-named row folded into a labelset matching the named peer's real hardware id and suppressed its genuine alert, because neither the `unless on(...)` match list nor the `max by (...)` fold included `device_name`, only `device_uid`. **Fixed** by adding `device_name` to both lists in the construct (`alerts/ftd-health.yaml` and `scripts/generate-dashboard.ts`'s `namedInterfacesOnly()`), verified against both the symmetric and asymmetric cases with real `promtool`. `device_name` is what actually disambiguates two devices sharing one `device_uid` — the same fix already applied to the dashboard's device-counting panel above.
+- **One confirmed, now-fixed break:** the dashboard's "Devices with an unhealthy signal" panel counted distinct devices via `count by (device_uid)` — silently undercounting when two HA peers breach *different* thresholds at once. Fixed to `count by (device_uid, device_name)`; see [§4.6.1](#461-device-inventory-ftd_device_-scc-only) for the same 1-row-vs-2-row consideration on the inventory side.
+
+**Open: whether FMC shares this behavior is unconfirmed** — no FMC HA pair has been available to test directly. Circumstantial evidence points the other way: `test/fixtures/fmc/devicerecords-page1.json` (live-verified, includes an HA-paired peer) shows every device with a **distinct** `id`. FMC's device inventory is built from `devicerecords`, where each HA node is registered as its own managed device — `/devicehapairs/ftddevicehapairs` ([§3.2](#32-scc-security-cloud-control--cdfmc-adapter)/Appendix A) is a separate pairing-*association* endpoint, not the device-identity source. If confirmed, this is a genuine, documented backend asymmetry: **on SCC, `device_uid` is not stable across an HA pair; on FMC, it likely is.** Verify with a live FMC HA pair before relying on either assumption.
 
 ---
 
@@ -1465,7 +1505,7 @@ Verified against Cisco's current API documentation **and** a live authenticated 
 |---|---|---|
 | `interface` | string | Hardware id, e.g. `Ethernet1/1`. **Always present** |
 | `interfaceName` | string | Human label, e.g. `outside`. **Optional — confirmed frequently absent** on unnamed/unused interfaces |
-| `interfaceType` | string | e.g. `Ethernet`, `Management` |
+| `interfaceType` | string | Confirmed live: `Ethernet`, `Management`, `SubInterface` (2026-08-11, an FTDv with subinterfaces). Purely informational — see [§4.3](#43-label-strategy)'s carve-out on this field never being coerced to `"unknown"` |
 | `linkStatus` | string enum | `UP` / `DOWN` |
 | `operationalStatus` | string enum | `UP` / `DOWN` |
 | `duplexMode` | string | Documented; **not observed** in the live sample |
@@ -1476,7 +1516,7 @@ Verified against Cisco's current API documentation **and** a live authenticated 
 | `bufferOverrunsAvg`, `bufferUnderrunsAvg` | number | |
 | `l2DecodeDropsAvg` | number | |
 
-**`haHealthMetrics`** — **CONDITIONAL: only present when the device is in an HA pair** (confirmed absent on the standalone sample). Fields: `nodeStatus` (`NORMAL`/`ERROR`/`WARNING`/`DISABLED`/`UNKNOWN`), `nodeType` (`PRIMARY`/`SECONDARY`).
+**`haHealthMetrics`** — **CONDITIONAL: only present when the device is in an HA pair** (confirmed absent on the standalone sample; **confirmed present and correct against a real HA pair, 2026-08-11**). Fields: `nodeStatus` (`NORMAL`/`ERROR`/`WARNING`/`DISABLED`/`UNKNOWN`), `nodeType` (`PRIMARY`/`SECONDARY`) — both confirmed live, no new values observed. **Not confirmed from this field alone:** both HA peers report the *same* `deviceUid` at the root of the response entry — see [§14.14](#1414-device_uid-is-not-stable-across-an-scc-ha-pair).
 
 **`raVpnSessionHealthMetrics`** — **CONDITIONAL: only present when RA VPN is configured** (confirmed absent). Fields: `activeRavpnSessionsAvg`, `inactiveRavpnSessionsAvg`, `peakConcurRavpnSessions`.
 
@@ -1488,11 +1528,28 @@ Verified against Cisco's current API documentation **and** a live authenticated 
 
 **Critical parsing note:** the four conditional groups above, plus per-interface `interfaceName`, were confirmed **absent as keys** — not present as `null` or empty. All must be optional at the type level, with presence tested via explicit `undefined` checks rather than truthiness (since `0` is a valid value for nearly every numeric field). See [§4.8](#48-handling-conditional-and-sparse-metric-groups).
 
+### `GET /v1/inventory/devices` — confirmed live, 2026-08-11
+
+Fleet-wide device listing, not nested under a manager UID (unlike `/health/metrics`). Response: `{ count, limit, offset, items: [...] }`.
+
+| Field | Type | Notes |
+|---|---|---|
+| `uid` | string | **Not `deviceUid`** — a genuine field-name difference from `/health/metrics`, despite being the same identifier value for the same device. Caught only by a live smoke test after this was first built against the (incorrect) assumption that the two endpoints shared a field name |
+| `name` | string | Matches `/health/metrics`'s `deviceName` for the same device |
+| `deviceType` | string | `CDFMC_MANAGED_FTD` for a managed FTD; also observed `MERAKI_MX` in the same response — **must filter on this field**, or a non-FTD entry renders as a permanently-"unreachable" phantom FTD |
+| `connectivityState` | string enum | `ONLINE` / `UNREACHABLE` confirmed live. No other value observed |
+| `configState` | string enum | `SYNCED` / `NOT_SYNCED` observed. Not yet modeled — see [§4.6](#46-scope-table)'s remaining-fields row |
+| `redundancyMode` | string enum | `STANDALONE` / `HA` confirmed live |
+
+Also observed but not modeled (deferred per [§4.6](#46-scope-table)): `serial`, `softwareVersion`, `connectorType`, `address`, `deviceRoles`, `conflictDetectionState`, `ftdLicenses`, `ftdPerformanceTier`, `ftdHaInfo` (a nested object naming both HA nodes individually, `haPairUid`/`haPairName`/`primaryNode`/`secondaryNode`, each with its own `name`/`serial`/`uidOnFmc`/`status`/`role`), `uidOnFmc`, `deviceRecordOnFmc`, `fmcAccessPolicy`, `modelNumber`, `hardwareModel`, `deviceMaintenanceWindow`, `complianceStatus`, `licenseStatus`.
+
+**On an HA pair, this endpoint returns exactly one row** (`redundancyMode: "HA"`) for what `/health/metrics` reports as two — see [§14.14](#1414-device_uid-is-not-stable-across-an-scc-ha-pair). `ftdHaInfo`'s nested `primaryNode`/`secondaryNode` objects are themselves the confirmation that this one row represents both physical/virtual nodes.
+
 ---
 
 ## Appendix C: confirmed FMC response schema (partial)
 
-Verified against a live authenticated FMC (v10.0.0, four FTDv devices, lab environment) during implementation-phase research. Device names/IPs/UUIDs below are placeholders — the actual capture used real lab values now excluded from the repository via `.gitignore`. Supersedes the "no example response bodies" gap noted in [§14.1](#141-standalone-fmc-response-body-field-names--partially-resolved).
+Verified against a live authenticated FMC (v10.0.0, four FTDv devices, lab environment) during implementation-phase research. Device names/IPs/UUIDs below are placeholders — the actual capture used real lab values now excluded from the repository via `.gitignore`. Supersedes the "no example response bodies" gap noted in [§14.1](#141-standalone-fmc-response-body-field-names--resolved-for-all-five-metric-families).
 
 **Auth response (`POST /api/fmc_platform/v1/auth/generatetoken`):** confirmed exactly as documented in [Appendix A](#appendix-a-scc-vs-standalone-fmc-endpoint-comparison) — `204 No Content`, tokens and `DOMAIN_UUID` in response headers (`X-auth-access-token`, `X-auth-refresh-token`, `DOMAIN_UUID`, `DOMAINS`), no response body.
 
@@ -1524,7 +1581,7 @@ Verified against a live authenticated FMC (v10.0.0, four FTDv devices, lab envir
 
 **Confirmed:**
 
-- `cpuHealthMetrics` and `memoryHealthMetrics` **do** break out into `linaUsageAvg`/`snortUsageAvg`/`systemUsageAvg`, identical field names to SCC's `cpuHealthMetrics`/`memoryHealthMetrics` — resolves the open sub-question in [§14.1](#141-standalone-fmc-response-body-field-names--partially-resolved). No `component`-label asymmetry between backends for CPU/MEM.
+- `cpuHealthMetrics` and `memoryHealthMetrics` **do** break out into `linaUsageAvg`/`snortUsageAvg`/`systemUsageAvg`, identical field names to SCC's `cpuHealthMetrics`/`memoryHealthMetrics` — resolves the open sub-question in [§14.1](#141-standalone-fmc-response-body-field-names--resolved-for-all-five-metric-families). No `component`-label asymmetry between backends for CPU/MEM.
 - `diskHealthMetrics.totalDiskUsageAvg` — identical field name to SCC.
 - **Wrapper shape differs from SCC.** FMC's `items[]` wraps one object per request (one device, one metric family), each carrying its own `startTime`/`endTime`/`links`/`name`/`id`/`type`, versus SCC's flat array of fully-populated multi-family device objects. The FMC adapter's mapping layer must not assume SCC's flatter shape.
 - **`startTime`/`endTime` are not ISO 8601** — format observed as `"YYYY-MM-DD HH:mm:ss.SSS UTC"`. Differs from the ISO 8601 format confirmed for SCC in [Appendix B](#appendix-b-confirmed-scc-response-schema); the FMC adapter must parse this format explicitly rather than reusing an SCC date parser.

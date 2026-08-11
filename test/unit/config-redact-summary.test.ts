@@ -16,6 +16,7 @@ function sccConfig(): AppConfig {
       apiToken: new Secret(REALISTIC_SCC_TOKEN),
       fmcUid: '00000000-0000-0000-0000-000000000000',
       timeRange: '5m',
+      inventoryPollIntervalSeconds: 300,
     },
     metricsPort: 10049,
     metricsBindAddress: '0.0.0.0',

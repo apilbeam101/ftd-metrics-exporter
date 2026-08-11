@@ -11,6 +11,7 @@ import {
   classifyBinaryEnum,
   classifyHaNodeStatus,
   classifyHaNodeType,
+  classifyInterfaceType,
   classifyTunnelState,
 } from './enum-render.ts';
 
@@ -119,13 +120,21 @@ export function renderDeviceMetrics(
     }
 
     for (const iface of device.interfaces ?? []) {
+      const rawInterfaceType = nonEmpty(iface.interfaceType);
+      const interfaceTypeResult =
+        rawInterfaceType !== undefined ? classifyInterfaceType(rawInterfaceType) : undefined;
+      if (interfaceTypeResult?.unrecognizedRawValue !== undefined) {
+        unknownEnumTotal.inc({
+          metric: 'ftd_interface_type',
+          value: lowercaseEnumLabel(interfaceTypeResult.unrecognizedRawValue),
+        });
+      }
+
       const base = {
         ...d,
         interface: iface.interface,
         interface_name: nonEmpty(iface.interfaceName) ?? iface.interface,
-        ...(nonEmpty(iface.interfaceType) !== undefined
-          ? { interface_type: iface.interfaceType }
-          : {}),
+        ...(interfaceTypeResult !== undefined ? { interface_type: interfaceTypeResult.label } : {}),
       };
 
       if (iface.inputBytesAvg !== undefined)

@@ -18,6 +18,10 @@ import { fileURLToPath } from 'node:url';
 import type { Counter, Gauge, Histogram } from 'prom-client';
 import { renderDashboardJson } from '../../scripts/generate-dashboard.ts';
 import { allDeviceGauges, createDeviceMetrics } from '../../src/metrics/device-metrics.ts';
+import {
+  allDeviceInventoryGauges,
+  createDeviceInventoryMetrics,
+} from '../../src/metrics/inventory-metrics.ts';
 import { createRegistry } from '../../src/metrics/registry.ts';
 import { createSelfMetrics } from '../../src/metrics/self.ts';
 
@@ -60,9 +64,11 @@ const ALERTS_EXPRESSIONS = ALERTS_YAML.split('\n')
 function declaredMetricNames(): Set<string> {
   const registry = createRegistry(false);
   const device = createDeviceMetrics(registry);
+  const inventory = createDeviceInventoryMetrics(registry);
   const self = createSelfMetrics(registry);
   const all = [
     ...allDeviceGauges(device),
+    ...allDeviceInventoryGauges(inventory),
     ...(Object.values(self) as Array<Gauge<string> | Counter<string> | Histogram<string>>),
   ];
 
@@ -96,9 +102,11 @@ function referencedMetricNames(text: string): string[] {
 function declaredLabels(): Map<string, Set<string>> {
   const registry = createRegistry(false);
   const device = createDeviceMetrics(registry);
+  const inventory = createDeviceInventoryMetrics(registry);
   const self = createSelfMetrics(registry);
   const all = [
     ...allDeviceGauges(device),
+    ...allDeviceInventoryGauges(inventory),
     ...(Object.values(self) as Array<Gauge<string> | Counter<string> | Histogram<string>>),
   ];
   const map = new Map<string, Set<string>>();
@@ -535,7 +543,7 @@ describe('Stage 15 dashboard and alert rules', () => {
      * (or vice versa) — a support call with no code-level explanation.
      */
     it('the dashboard and the alerts use the same label_replace construct', () => {
-      const construct = /unless on\(job, instance, device_uid, interface\)/;
+      const construct = /unless on\(job, instance, device_uid, device_name, interface\)/;
       assert.match(ALERTS_EXPRESSIONS, construct);
       assert.match(DASHBOARD_JSON, construct);
       const dashboardUses = [...DASHBOARD_JSON.matchAll(/label_replace/g)].length;
@@ -553,7 +561,7 @@ describe('Stage 15 dashboard and alert rules', () => {
       // labelset" — every device goes unalerted, not just the colliding pair,
       // and the colliding interfaces need not even be down. Reproduced against
       // real promtool and a real Prometheus before this guard was added.
-      const fold = /max by \(job, instance, device_uid, interface_name\) \(/;
+      const fold = /max by \(job, instance, device_uid, device_name, interface_name\) \(/;
       for (const [label, text] of [
         ['alerts', ALERTS_EXPRESSIONS],
         ['dashboard', DASHBOARD_JSON],
@@ -582,6 +590,30 @@ describe('Stage 15 dashboard and alert rules', () => {
       );
     });
 
+    it('the filter matches per-device-name, never across an HA pair sharing one device_uid', () => {
+      // Review finding: on SCC, both nodes of an HA pair report the SAME
+      // device_uid (DESIGN.md §14.14, confirmed live). Without device_name
+      // in both the `unless on(...)` list and the `max by (...)` fold, an
+      // unnamed interface on one peer can suppress a genuinely-down NAMED
+      // interface on the other peer at the same hardware id.
+      assert.ok(
+        !/unless on\(job, instance, device_uid, interface\)(?!,)/.test(ALERTS_EXPRESSIONS),
+        'the alerts filter omits device_name — an HA pair sharing one device_uid can suppress across peers',
+      );
+      assert.ok(
+        !/unless on\(job, instance, device_uid, interface\)(?!,)/.test(DASHBOARD_JSON),
+        'the dashboard filter omits device_name — see the alerts assertion above',
+      );
+      assert.ok(
+        !/max by \(job, instance, device_uid, interface_name\) \(/.test(ALERTS_EXPRESSIONS),
+        'the alerts max-by fold omits device_name — see above',
+      );
+      assert.ok(
+        !/max by \(job, instance, device_uid, interface_name\) \(/.test(DASHBOARD_JSON),
+        'the dashboard max-by fold omits device_name — see above',
+      );
+    });
+
     it('the down-interface alert does not use the naive interface_name != "" filter', () => {
       // The filter the plan explicitly identified as wrong: DESIGN.md §4.3's
       // fallback means interface_name is never empty, so this matches every
@@ -594,6 +626,57 @@ describe('Stage 15 dashboard and alert rules', () => {
       // the decision is recorded — asserted so this check can never be
       // "fixed" by deleting the rationale.
       assert.match(ALERTS_YAML, /interface_name != ""/);
+    });
+  });
+
+  describe('distinct-device counts group by device_uid AND device_name', () => {
+    /**
+     * SCC's live behavior, confirmed against a real HA pair: both nodes of an
+     * HA pair share one `device_uid` (only `device_name` differs — see
+     * DESIGN.md §2.3's device_uid caveat). Any aggregation meant to count
+     * distinct *devices* that groups by `device_uid` alone silently collapses
+     * two different HA peers breaching different thresholds into one.
+     */
+    it('the "unhealthy devices" panel groups by device_uid and device_name together', () => {
+      // DASHBOARD_JSON is the raw JSON *text*: the panel's real newline is
+      // encoded as the two literal characters `\` + `n`, not an actual
+      // newline byte, so the pattern below matches that literal escape.
+      assert.match(
+        DASHBOARD_JSON,
+        /count by \(device_uid, device_name\) \(\\n\s*\(ftd_cpu_usage_ratio/,
+      );
+    });
+
+    it('no panel or alert aggregates distinct devices by device_uid alone', () => {
+      // A bare `count by (device_uid)` / `count(count by (device_uid) (` with no
+      // trailing `, device_name)` is the exact regression this guards: it
+      // compiles, runs, and silently undercounts only once a real HA pair
+      // exists to expose it. `interface`-scoped aggregations are exempt —
+      // they legitimately group by (device_uid, interface) or similar for a
+      // different reason (per-interface identity, not per-device counting)
+      // and already carry other disambiguating labels.
+      const bareDeviceUidGroup = /count by \(device_uid\)(?!\s*,)/;
+      assert.ok(
+        !bareDeviceUidGroup.test(DASHBOARD_JSON),
+        'dashboard aggregates by device_uid alone somewhere — HA pairs share one device_uid',
+      );
+      assert.ok(
+        !bareDeviceUidGroup.test(ALERTS_EXPRESSIONS),
+        'alerts aggregate by device_uid alone somewhere — HA pairs share one device_uid',
+      );
+    });
+
+    it('detects a regression to the bare form (negative control)', () => {
+      const mutated = DASHBOARD_JSON.replace(
+        'count by (device_uid, device_name) (\\n  (ftd_cpu_usage_ratio',
+        'count by (device_uid) (\\n  (ftd_cpu_usage_ratio',
+      );
+      assert.notEqual(
+        mutated,
+        DASHBOARD_JSON,
+        'mutation did not apply — panel text changed upstream',
+      );
+      assert.match(mutated, /count by \(device_uid\)(?!\s*,)/);
     });
   });
 

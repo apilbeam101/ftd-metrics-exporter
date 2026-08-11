@@ -1,9 +1,15 @@
 import type { Registry } from 'prom-client';
+import { getSccDeviceInventoryReader } from '../../../src/backend-factory.ts';
 import type { HealthBackend } from '../../../src/backends/types.ts';
 import { type Clock, createRealClock } from '../../../src/http/clock.ts';
 import { createLogger } from '../../../src/log/logger.ts';
 import { renderDeviceMetrics } from '../../../src/metrics/collector.ts';
 import { createDeviceMetrics, type DeviceMetrics } from '../../../src/metrics/device-metrics.ts';
+import { renderDeviceInventoryMetrics } from '../../../src/metrics/inventory-collector.ts';
+import {
+  createDeviceInventoryMetrics,
+  type DeviceInventoryMetrics,
+} from '../../../src/metrics/inventory-metrics.ts';
 import { createRegistry } from '../../../src/metrics/registry.ts';
 import { createSelfMetrics, type SelfMetrics } from '../../../src/metrics/self.ts';
 import {
@@ -49,6 +55,7 @@ export interface TestMetrics {
   cache: MetricsCache;
   selfMetrics: SelfMetrics;
   deviceMetrics: DeviceMetrics;
+  deviceInventoryMetrics: DeviceInventoryMetrics;
   parseErrorTracker: ParseErrorTracker;
   recorder: SelfMetricsRecorder;
 }
@@ -60,9 +67,18 @@ export function createTestMetrics(clock: Clock): TestMetrics {
     cacheAgeSecondsCollect: cacheAgeSecondsCollector(cache, clock),
   });
   const deviceMetrics = createDeviceMetrics(registry);
+  const deviceInventoryMetrics = createDeviceInventoryMetrics(registry);
   const parseErrorTracker = createParseErrorTracker();
   const recorder = createSelfMetricsRecorder(selfMetrics);
-  return { registry, cache, selfMetrics, deviceMetrics, parseErrorTracker, recorder };
+  return {
+    registry,
+    cache,
+    selfMetrics,
+    deviceMetrics,
+    deviceInventoryMetrics,
+    parseErrorTracker,
+    recorder,
+  };
 }
 
 export interface CreateTestAppOptions {
@@ -131,13 +147,19 @@ export function waitFor(predicate: () => boolean, timeoutMs = 5_000): Promise<vo
 
 export async function createTestApp(options: CreateTestAppOptions): Promise<TestApp> {
   const clock = options.clock ?? createRealClock();
-  const { registry, cache, selfMetrics, deviceMetrics, parseErrorTracker } = options.metrics;
+  const { registry, cache, selfMetrics, deviceMetrics, deviceInventoryMetrics, parseErrorTracker } =
+    options.metrics;
   const logLines: string[] = [];
   const logger = createLogger({
     level: 'debug',
     format: 'json',
     sink: (line) => logLines.push(line),
   });
+
+  // `undefined` for FMC — mirrors src/index.ts's own wiring exactly, so this
+  // harness actually exercises the real production path (getSccDeviceInventoryReader
+  // -> renderDeviceInventoryMetrics) rather than only ever calling renderDeviceMetrics.
+  const readDeviceInventory = getSccDeviceInventoryReader(options.backend);
 
   const server = createServer({
     bindAddress: '127.0.0.1',
@@ -147,7 +169,7 @@ export async function createTestApp(options: CreateTestAppOptions): Promise<Test
     isReady: () => cache.get() !== undefined,
     renderMetrics: () => {
       const entry = cache.get();
-      renderDeviceMetrics(
+      const healthResult = renderDeviceMetrics(
         {
           metrics: deviceMetrics,
           unknownEnumTotal: selfMetrics.unknownEnumTotal,
@@ -155,6 +177,14 @@ export async function createTestApp(options: CreateTestAppOptions): Promise<Test
         },
         entry?.snapshots ?? [],
       );
+      const inventoryResult =
+        readDeviceInventory !== undefined
+          ? renderDeviceInventoryMetrics(
+              { metrics: deviceInventoryMetrics, unknownEnumTotal: selfMetrics.unknownEnumTotal },
+              readDeviceInventory(),
+            )
+          : undefined;
+      selfMetrics.series.set(healthResult.seriesCount + (inventoryResult?.seriesCount ?? 0));
     },
   });
   const bound = await server.start();

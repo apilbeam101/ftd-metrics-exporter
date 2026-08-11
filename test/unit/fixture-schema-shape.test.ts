@@ -6,6 +6,10 @@ import type {
   FmcAggregateMetricsResponse,
   FmcDeviceRecordsResponse,
 } from '../../src/backends/fmc/schema.ts';
+import type {
+  SccInventoryDeviceEntry,
+  SccInventoryResponse,
+} from '../../src/backends/scc/inventory-schema.ts';
 import type { SccHealthMetricsResponse } from '../../src/backends/scc/schema.ts';
 
 /**
@@ -134,6 +138,41 @@ test('fmc/paginated-40-devices-page1.json + page2.json together cover 40 unique 
   assert.equal(page2.items?.length, 15);
   const ids = new Set([...(page1.items ?? []), ...(page2.items ?? [])].map((d) => d.id));
   assert.equal(ids.size, 40);
+});
+
+test('scc/inventory.json matches the expected SccInventoryResponse shape (GET /v1/inventory/devices)', () => {
+  // Review finding: SccInventoryDeviceEntry/SccInventoryResponse were dead
+  // code with no fixture-shape guard at all -- exactly the kind of gap that
+  // let the `uid`-vs-`deviceUid` field-name error ship undetected until a
+  // live smoke test caught it after the fact. This is that guard.
+  const response = readFixture<SccInventoryResponse>('scc/inventory.json');
+  assert.equal(response.items.length, 3);
+
+  const ftds = response.items.filter(
+    (item: SccInventoryDeviceEntry) => item.deviceType === 'CDFMC_MANAGED_FTD',
+  );
+  assert.equal(ftds.length, 2, 'the Meraki entry must not be a CDFMC_MANAGED_FTD');
+
+  for (const device of ftds) {
+    assert.match(device.uid, /^[0-9a-f-]{36}$/i);
+    assert.equal(typeof device.name, 'string');
+    assert.ok(
+      device.connectivityState === 'ONLINE' || device.connectivityState === 'UNREACHABLE',
+      `unexpected connectivityState: ${device.connectivityState}`,
+    );
+    assert.ok(
+      device.redundancyMode === 'STANDALONE' || device.redundancyMode === 'HA',
+      `unexpected redundancyMode: ${device.redundancyMode}`,
+    );
+  }
+
+  const haDevice = ftds.find((d) => d.redundancyMode === 'HA');
+  assert.ok(haDevice, 'expected one HA-paired device in the fixture');
+  const unreachableDevice = ftds.find((d) => d.connectivityState === 'UNREACHABLE');
+  assert.ok(unreachableDevice, 'expected one UNREACHABLE device in the fixture');
+
+  const meraki = response.items.find((item) => item.deviceType === 'MERAKI_MX');
+  assert.ok(meraki, 'expected the non-FTD MERAKI_MX entry to still be present in the raw fixture');
 });
 
 test('scc/s2s-1000-tunnels.json has exactly 1000 unique tunnel entries', () => {

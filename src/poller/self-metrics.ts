@@ -31,6 +31,7 @@ export interface SelfMetricsRecorder {
   onTokenExpiryUpdate(expiryUnixSeconds: number): void;
   onDiscoverySuccess(deviceCount: number): void;
   onDiscoveryFailure(): void;
+  onSccInventoryError(): void;
 }
 
 export function createSelfMetricsRecorder(
@@ -45,6 +46,7 @@ export function createSelfMetricsRecorder(
     | 'fmcTokenExpiryTimestampSeconds'
     | 'devicesDiscovered'
     | 'discoveryErrorsTotal'
+    | 'sccInventoryErrorsTotal'
   >,
 ): SelfMetricsRecorder {
   return {
@@ -72,6 +74,9 @@ export function createSelfMetricsRecorder(
     },
     onDiscoveryFailure(): void {
       metrics.discoveryErrorsTotal.inc();
+    },
+    onSccInventoryError(): void {
+      metrics.sccInventoryErrorsTotal.inc();
     },
   };
 }

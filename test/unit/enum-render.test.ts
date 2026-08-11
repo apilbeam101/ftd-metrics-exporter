@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import {
   classifyBinaryEnum,
   classifyHaNodeStatus,
+  classifyInterfaceType,
   classifyTunnelState,
 } from '../../src/metrics/enum-render.ts';
 
@@ -44,4 +45,23 @@ test('classifyTunnelState: a novel value maps to "unknown" and flags unrecognize
   const result = classifyTunnelState('TUNNEL_FLAPPING');
   assert.equal(result.activeLabel, 'unknown');
   assert.equal(result.unrecognizedRawValue, 'TUNNEL_FLAPPING');
+});
+
+test('classifyInterfaceType: every known value passes through unchanged with no unrecognized flag', () => {
+  for (const raw of ['Ethernet', 'Management', 'SubInterface', 'GigabitEthernet']) {
+    assert.deepEqual(classifyInterfaceType(raw), { label: raw });
+  }
+});
+
+test('classifyInterfaceType: a novel value passes through UNCHANGED (never "unknown") but flags unrecognizedRawValue', () => {
+  // The one classifier in this module that deliberately does NOT coerce an
+  // unrecognized value to a fallback label — interface_type is purely
+  // informational and its rendered value is the versioned public API
+  // (DESIGN.md §13/§4.3). Coercing to "unknown" here would be a breaking
+  // rendered-value change for whoever currently sees this raw value.
+  const result = classifyInterfaceType('VirtualPortChannel');
+  assert.deepEqual(result, {
+    label: 'VirtualPortChannel',
+    unrecognizedRawValue: 'VirtualPortChannel',
+  });
 });

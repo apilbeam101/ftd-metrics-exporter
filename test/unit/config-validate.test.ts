@@ -329,6 +329,7 @@ test('defaults: with only required variables set, every default matches DESIGN.m
   assert.ok(result.config.backend.kind === 'scc');
   if (result.config.backend.kind === 'scc') {
     assert.equal(result.config.backend.timeRange, '5m');
+    assert.equal(result.config.backend.inventoryPollIntervalSeconds, 300);
   }
 });
 
@@ -484,6 +485,55 @@ test('SCC_TIME_RANGE reaches the returned config verbatim for each valid value',
       assert.equal(result.config.backend.timeRange, value);
     }
   }
+});
+
+// --- SCC_INVENTORY_POLL_INTERVAL_SECONDS (DESIGN.md §4.6.1) ---
+
+test('SCC_INVENTORY_POLL_INTERVAL_SECONDS defaults to 300 when unset', () => {
+  const result = validate(sccEnv());
+  assert.ok(result.ok);
+  assert.ok(result.config.backend.kind === 'scc');
+  if (result.config.backend.kind === 'scc') {
+    assert.equal(result.config.backend.inventoryPollIntervalSeconds, 300);
+  }
+});
+
+test('SCC_INVENTORY_POLL_INTERVAL_SECONDS reaches the returned config verbatim when set', () => {
+  const result = validate(sccEnv({ SCC_INVENTORY_POLL_INTERVAL_SECONDS: '60' }));
+  assert.ok(result.ok);
+  assert.ok(result.config.backend.kind === 'scc');
+  if (result.config.backend.kind === 'scc') {
+    assert.equal(result.config.backend.inventoryPollIntervalSeconds, 60);
+  }
+});
+
+test('SCC_INVENTORY_POLL_INTERVAL_SECONDS=0 is rejected (must be >= 1)', () => {
+  const result = validate(sccEnv({ SCC_INVENTORY_POLL_INTERVAL_SECONDS: '0' }));
+  assert.equal(result.ok, false);
+  assert.ok(!result.ok);
+  assert.ok(result.errors.some((e) => e.includes('SCC_INVENTORY_POLL_INTERVAL_SECONDS')));
+});
+
+test('SCC_INVENTORY_POLL_INTERVAL_SECONDS=not-a-number is rejected with an actionable message', () => {
+  const result = validate(sccEnv({ SCC_INVENTORY_POLL_INTERVAL_SECONDS: 'soon' }));
+  assert.equal(result.ok, false);
+  assert.ok(!result.ok);
+  assert.ok(result.errors.some((e) => e.includes('SCC_INVENTORY_POLL_INTERVAL_SECONDS')));
+});
+
+test('SCC_INVENTORY_POLL_INTERVAL_SECONDS beyond the Node timer ceiling is rejected, same as every other duration var', () => {
+  const result = validate(sccEnv({ SCC_INVENTORY_POLL_INTERVAL_SECONDS: '9007199254740993' }));
+  assert.equal(result.ok, false);
+  assert.ok(!result.ok);
+  assert.ok(result.errors.some((e) => e.includes('SCC_INVENTORY_POLL_INTERVAL_SECONDS')));
+});
+
+test('SCC_INVENTORY_POLL_INTERVAL_SECONDS set while BACKEND_TYPE=fmc does not trigger the cross-backend warning (it is a defaulted var, like SCC_TIME_RANGE)', () => {
+  const result = validate(fmcEnv({ SCC_INVENTORY_POLL_INTERVAL_SECONDS: '300' }));
+  assert.ok(result.ok);
+  assert.ok(
+    !result.warnings.some((w) => w.message.includes('SCC_INVENTORY_POLL_INTERVAL_SECONDS')),
+  );
 });
 
 // --- Regression tests from the Stage 4 adversarial review ---

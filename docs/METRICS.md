@@ -1,7 +1,7 @@
 # Metric reference
 
-Generated from `src/metrics/device-metrics.ts` and `src/metrics/self.ts` by
-`scripts/generate-metrics-doc.ts`. Do not hand-edit the tables below —
+Generated from `src/metrics/device-metrics.ts`, `src/metrics/inventory-metrics.ts`, and
+`src/metrics/self.ts` by `scripts/generate-metrics-doc.ts`. Do not hand-edit the tables below —
 regenerate instead. For the full design rationale and the metric-surface
 stability contract, see [DESIGN.md](DESIGN.md).
 
@@ -42,6 +42,18 @@ never as zero, never as `NaN`.
 | `ftd_ravpn_sessions_peak_concurrent` | gauge | device_uid, device_name | Peak concurrent RA VPN session count over the sample window. |
 | `ftd_s2s_tunnel_state` | gauge | device_uid, device_name, tunnel_id, tunnel_name, state | State set: exactly one state label is 1 for a given tunnel. |
 
+## Device inventory metrics (`ftd_device_*`, SCC only)
+
+From SCC's device inventory (DESIGN.md §14.6), on its own poll cadence independent of
+the health-metrics poll above — populated even for a device absent from every other
+`ftd_*` series (e.g. one SCC reports UNREACHABLE). Not available on the FMC backend,
+which has no equivalent inventory endpoint wired up.
+
+| Metric | Type | Labels | Description |
+|---|---|---|---|
+| `ftd_device_connectivity_up` | gauge | device_uid, device_name | 1 if SCC device inventory reports the device ONLINE, 0 if UNREACHABLE. Independent of the health-metrics poll — populated even for a device absent from every other ftd_* series. Omitted when connectivity state is absent or unrecognized. |
+| `ftd_device_info` | gauge | device_uid, device_name, redundancy_mode | Always 1. Informational; from SCC device inventory. redundancy_mode carries standalone/ha (lowercased), or unknown. |
+
 ## Exporter self-metrics (`ftd_exporter_*`)
 
 | Metric | Type | Labels | Description |
@@ -60,6 +72,7 @@ never as zero, never as `NaN`.
 | `ftd_exporter_poll_errors_total` | counter | reason | Poll cycle failures, by reason. |
 | `ftd_exporter_poll_total` | counter | (none) | Total poll cycles attempted. |
 | `ftd_exporter_rate_limit_deferrals_total` | counter | (none) | Times a request was delayed by the internal rate limiter. |
+| `ftd_exporter_scc_inventory_errors_total` | counter | (none) | SCC backend: device-inventory poll failures. |
 | `ftd_exporter_series` | gauge | (none) | Series currently rendered on /metrics. |
 | `ftd_exporter_tls_verification_disabled` | gauge | (none) | 1 if TLS verification is disabled for the upstream backend. |
 | `ftd_exporter_unknown_enum_total` | counter | metric, value | Unrecognized upstream enum values encountered while rendering, by metric and value. |

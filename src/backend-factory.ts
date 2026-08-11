@@ -1,7 +1,12 @@
 import { type CreateFmcAdapterOptions, createFmcAdapter } from './backends/fmc/adapter.ts';
-import { type CreateSccAdapterOptions, createSccAdapter } from './backends/scc/adapter.ts';
+import {
+  type CreateSccAdapterOptions,
+  createSccAdapter,
+  type SccHealthBackend,
+} from './backends/scc/adapter.ts';
 import type { HealthBackend } from './backends/types.ts';
 import type { AppConfig } from './config/types.ts';
+import type { DeviceInventoryEntry } from './domain/device-inventory.ts';
 import type { ParseError } from './domain/diagnostics.ts';
 import type { Clock } from './http/clock.ts';
 import type { HttpError } from './http/errors.ts';
@@ -29,6 +34,8 @@ export interface BackendHooks {
   onDiscoveryFailure?: () => void;
   onDiscoveryWarning?: (message: string) => void;
   onSizingWarning?: (message: string) => void;
+  /** SCC-only: device-inventory poll failure (DESIGN.md §4.6.1) — the previous inventory list is kept. */
+  onInventoryError?: () => void;
   /** SCC-only raw-response attachment point (`--dump-raw`). */
   onRawResponse?: CreateSccAdapterOptions['onRawResponse'];
   /** FMC-only raw-response attachment point (`--dump-raw`) — a distinct signature (per device/family), so kept as its own field rather than overloading `onRawResponse`. */
@@ -61,6 +68,7 @@ export function createBackend(options: CreateBackendOptions): HealthBackend {
       apiToken: backend.apiToken,
       fmcUid: backend.fmcUid,
       timeRange: backend.timeRange,
+      inventoryPollIntervalSeconds: backend.inventoryPollIntervalSeconds,
       clock: options.clock,
       logger: options.logger,
       requestTimeoutMs,
@@ -70,6 +78,7 @@ export function createBackend(options: CreateBackendOptions): HealthBackend {
       }),
       ...(hooks.onUpstreamRequest !== undefined && { onUpstreamRequest: hooks.onUpstreamRequest }),
       ...(hooks.onUpstreamRetry !== undefined && { onUpstreamRetry: hooks.onUpstreamRetry }),
+      ...(hooks.onInventoryError !== undefined && { onInventoryError: hooks.onInventoryError }),
       ...(hooks.onRawResponse !== undefined && { onRawResponse: hooks.onRawResponse }),
     });
   }
@@ -107,4 +116,25 @@ export function createBackend(options: CreateBackendOptions): HealthBackend {
     ...(hooks.onSizingWarning !== undefined && { onSizingWarning: hooks.onSizingWarning }),
     ...(hooks.onFmcRawResponse !== undefined && { onRawResponse: hooks.onFmcRawResponse }),
   });
+}
+
+/**
+ * Narrows a `HealthBackend` returned by `createBackend` to `SccHealthBackend`
+ * and returns its device-inventory reader, or `undefined` for FMC. Kept here
+ * rather than as an inline cast at the one call site that needs it
+ * (`src/index.ts`) so "how config maps to adapter specifics" — this
+ * module's own stated purpose — stays the one place branching on
+ * `backend.kind` for this feature, matching every other backend-specific
+ * decision in this file. Safe because `createBackend` guarantees a `kind:
+ * 'scc'` result is always the object `createSccAdapter` returned, which
+ * always satisfies `SccHealthBackend`.
+ */
+export function getSccDeviceInventoryReader(
+  backend: HealthBackend,
+): (() => DeviceInventoryEntry[]) | undefined {
+  if (backend.kind !== 'scc') {
+    return undefined;
+  }
+  const scc = backend as SccHealthBackend;
+  return () => scc.getDeviceInventory();
 }

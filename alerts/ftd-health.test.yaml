@@ -294,6 +294,60 @@ tests:
         exp_alerts: []
 
   # ===========================================================================
+  # FtdDeviceUnreachable -- the only alert that can catch a device that has
+  # gone fully absent from health/metrics (DESIGN.md §14.6, confirmed live
+  # 2026-08-11: an UNREACHABLE device produces no series there at all).
+  # ===========================================================================
+  - interval: 1m
+    name: FtdDeviceUnreachable fires after 10m unreachable, and stays silent for a reachable device
+    input_series:
+      - series: 'ftd_device_connectivity_up{device_uid="u1",device_name="ftd-offline"}'
+        values: "0+0x30"
+      - series: 'ftd_device_connectivity_up{device_uid="u2",device_name="ftd-online"}'
+        values: "1+0x30"
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: FtdDeviceUnreachable
+        exp_alerts: []
+      - eval_time: 15m
+        alertname: FtdDeviceUnreachable
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              device_uid: u1
+              device_name: ftd-offline
+            exp_annotations:
+              summary: FTD device ftd-offline is unreachable from SCC
+              description: >-
+                SCC's device inventory has reported ftd-offline as
+                UNREACHABLE for over 10 minutes. This device will also be
+                silently absent from every other ftd_* health metric -- this
+                is the only alert that can catch it going offline.
+
+  - interval: 1m
+    name: FtdDeviceUnreachable is silent on a fleet with no SCC device-inventory data at all (e.g. FMC backend)
+    input_series:
+      # No ftd_device_connectivity_up series exist -- the FMC backend, or an
+      # SCC fleet before its first inventory refresh. An unrelated series is
+      # present so the test has input at all.
+      - series: 'ftd_cpu_usage_ratio{device_uid="u1",device_name="ftd-1",component="system"}'
+        values: "0.1+0x20"
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: FtdDeviceUnreachable
+        exp_alerts: []
+
+  - interval: 1m
+    name: FtdDeviceUnreachable pins the 10m for-duration -- a brief blip does not fire
+    input_series:
+      - series: 'ftd_device_connectivity_up{device_uid="u1",device_name="ftd-blip"}'
+        values: "1 1 1 1 1 0 0 0 1 1 1 1 1 1 1 1 1 1 1 1"
+    alert_rule_test:
+      - eval_time: 19m
+        alertname: FtdDeviceUnreachable
+        exp_alerts: []
+
+  # ===========================================================================
   # FtdHighCpu / FtdHighMemory -- ratio scale (0-1) is the regression here.
   # ===========================================================================
   - interval: 1m
@@ -583,6 +637,83 @@ tests:
                 Named interface  (Ethernet1/3) on ftd-1 has been operationally
                 down for 5 minutes. Unnamed/unused interfaces are excluded from
                 this rule by design -- see the comment above it.
+
+  - interval: 1m
+    name: FtdInterfaceDown distinguishes two HA peers sharing one device_uid
+    input_series:
+      # Confirmed live against a real SCC HA pair (2026-08-11): both nodes of
+      # an HA pair share one device_uid -- only device_name differs. Real HA
+      # config sync means both peers report the same interface layout, so a
+      # named interface with the same hardware id and interface_name exists
+      # on both. Verified with a real promtool run before being promoted
+      # here: the primary stays up, the secondary goes down.
+      - series: 'ftd_interface_operational_up{job="ftd-metrics",instance="e:10049",device_uid="ha-shared",device_name="ftd-ha-primary",interface="Ethernet1/1",interface_name="outside"}'
+        values: "1+0x20"
+      - series: 'ftd_interface_operational_up{job="ftd-metrics",instance="e:10049",device_uid="ha-shared",device_name="ftd-ha-secondary",interface="Ethernet1/1",interface_name="outside"}'
+        values: "0+0x20"
+      # An unnamed interface, identically unnamed on both peers (config
+      # sync) -- must stay suppressed on BOTH, not just one, even though
+      # they share job/instance/device_uid.
+      - series: 'ftd_interface_operational_up{job="ftd-metrics",instance="e:10049",device_uid="ha-shared",device_name="ftd-ha-primary",interface="Ethernet1/2",interface_name="Ethernet1/2"}'
+        values: "0+0x20"
+      - series: 'ftd_interface_operational_up{job="ftd-metrics",instance="e:10049",device_uid="ha-shared",device_name="ftd-ha-secondary",interface="Ethernet1/2",interface_name="Ethernet1/2"}'
+        values: "0+0x20"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: FtdInterfaceDown
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: ftd-metrics
+              instance: e:10049
+              device_uid: ha-shared
+              device_name: ftd-ha-secondary
+              interface: Ethernet1/1
+              interface_name: outside
+            exp_annotations:
+              summary: FTD interface outside down on ftd-ha-secondary
+              description: >-
+                Named interface outside (Ethernet1/1) on ftd-ha-secondary has
+                been operationally down for 5 minutes. Unnamed/unused
+                interfaces are excluded from this rule by design -- see the
+                comment above it.
+
+  - interval: 1m
+    name: FtdInterfaceDown -- an unnamed interface on one HA peer must not suppress a genuinely-down NAMED interface on the other peer at the same hardware id
+    input_series:
+      # Review finding, adversarial to the symmetric case above: real HA
+      # config sync means both peers are USUALLY named identically, but
+      # nothing in PromQL enforces that, and a transient config-sync lag is
+      # exactly the scenario a review should construct. Both peers share
+      # one device_uid. Peer A's Ethernet1/1 is genuinely named "outside"
+      # and down -- it must fire. Peer B's Ethernet1/1 is unnamed (its
+      # interface_name fell back to the hardware id) and also down.
+      # Without device_name in the filter's `on(...)`/`max by (...)` lists,
+      # peer B's fallback-named row folds into a labelset that matches peer
+      # A's real hardware id and incorrectly suppresses peer A's alert too.
+      - series: 'ftd_interface_operational_up{job="ftd-metrics",instance="e:10049",device_uid="ha-shared",device_name="ftd-ha-peer-a",interface="Ethernet1/1",interface_name="outside"}'
+        values: "0+0x20"
+      - series: 'ftd_interface_operational_up{job="ftd-metrics",instance="e:10049",device_uid="ha-shared",device_name="ftd-ha-peer-b",interface="Ethernet1/1",interface_name="Ethernet1/1"}'
+        values: "0+0x20"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: FtdInterfaceDown
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: ftd-metrics
+              instance: e:10049
+              device_uid: ha-shared
+              device_name: ftd-ha-peer-a
+              interface: Ethernet1/1
+              interface_name: outside
+            exp_annotations:
+              summary: FTD interface outside down on ftd-ha-peer-a
+              description: >-
+                Named interface outside (Ethernet1/1) on ftd-ha-peer-a has
+                been operationally down for 5 minutes. Unnamed/unused
+                interfaces are excluded from this rule by design -- see the
+                comment above it.
 
   # ===========================================================================
   # FtdInterfaceErrors -- same filter, so same both-directions coverage.

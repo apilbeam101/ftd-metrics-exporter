@@ -57,6 +57,7 @@ test('createSelfMetricsRecorder token/discovery hooks wire to the correct metric
   recorder.onTokenExpiryUpdate(1_700_000_000);
   recorder.onDiscoverySuccess(42);
   recorder.onDiscoveryFailure();
+  recorder.onSccInventoryError();
 
   assert.equal((await metrics.fmcTokenRefreshesTotal.get()).values[0]?.value, 1);
   assert.equal((await metrics.fmcTokenReauthsTotal.get()).values[0]?.value, 1);
@@ -66,6 +67,7 @@ test('createSelfMetricsRecorder token/discovery hooks wire to the correct metric
   );
   assert.equal((await metrics.devicesDiscovered.get()).values[0]?.value, 42);
   assert.equal((await metrics.discoveryErrorsTotal.get()).values[0]?.value, 1);
+  assert.equal((await metrics.sccInventoryErrorsTotal.get()).values[0]?.value, 1);
 });
 
 test('setBuildInfo sets ftd_exporter_build_info to 1 with version/commit/node_version/backend labels', async () => {

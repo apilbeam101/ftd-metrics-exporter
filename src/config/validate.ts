@@ -24,7 +24,13 @@ import {
  */
 export const LEGACY_SCC_HOSTNAME_PATTERN = /^edge\.[a-z0-9-]+\.cdo\.cisco\.com$/i;
 
-const SCC_ONLY_VARS = ['SCC_BASE_URL', 'SCC_API_TOKEN', 'SCC_FMC_UID', 'SCC_TIME_RANGE'] as const;
+const SCC_ONLY_VARS = [
+  'SCC_BASE_URL',
+  'SCC_API_TOKEN',
+  'SCC_FMC_UID',
+  'SCC_TIME_RANGE',
+  'SCC_INVENTORY_POLL_INTERVAL_SECONDS',
+] as const;
 
 const FMC_ONLY_VARS = [
   'FMC_HOST',
@@ -151,7 +157,10 @@ const FMC_ONLY_DEFAULTED_VARS = new Set<string>([
   'FMC_METRIC_FAMILIES',
   'FMC_TIME_RANGE',
 ]);
-const SCC_ONLY_DEFAULTED_VARS = new Set<string>(['SCC_TIME_RANGE']);
+const SCC_ONLY_DEFAULTED_VARS = new Set<string>([
+  'SCC_TIME_RANGE',
+  'SCC_INVENTORY_POLL_INTERVAL_SECONDS',
+]);
 
 function reportCrossBackendVars(
   env: Readonly<Record<string, string | undefined>>,
@@ -339,6 +348,13 @@ function validateSccBackend(
   warnings: ConfigWarning[],
 ): BackendConfig | undefined {
   const timeRange = validateTimeRange(env, 'SCC_TIME_RANGE', errors);
+  const inventoryPollIntervalSeconds = validatePositiveInt(
+    env,
+    'SCC_INVENTORY_POLL_INTERVAL_SECONDS',
+    300,
+    errors,
+    { min: 1, max: MAX_TIMER_SECONDS },
+  );
 
   const baseUrlRaw = nonEmpty(env.SCC_BASE_URL);
   let baseUrlOk = false;
@@ -407,6 +423,7 @@ function validateSccBackend(
     apiToken: new Secret(apiTokenRaw),
     fmcUid: fmcUidRaw,
     timeRange,
+    inventoryPollIntervalSeconds,
   };
 }
 
