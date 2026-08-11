@@ -140,6 +140,17 @@ Full metric names, types, labels, and descriptions: [docs/METRICS.md](docs/METRI
 
 Running into a problem? See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) — covers common configuration, permissions, and reachability issues across all three deployment methods.
 
+## Dashboard and alerts
+
+A Grafana dashboard and a set of Prometheus alerting rules ship with the exporter:
+
+- [dashboards/ftd-health.json](dashboards/ftd-health.json) — 35 panels across 8 rows, exporter health first. Import it as-is; it uses a `DS_PROMETHEUS` datasource variable rather than a hardcoded datasource uid.
+- [alerts/ftd-health.yaml](alerts/ftd-health.yaml) — 13 rules covering exporter health, staleness, resource pressure, interfaces, HA, VPN, and chassis PSUs.
+
+Both assume Prometheus scrapes the exporter under the job name `ftd-metrics`. One rule (`FtdExporterAbsent`, the only one that can fire when the exporter process is dead) matches that job name explicitly — change it there if yours differs.
+
+Import instructions, provisioning options, threshold guidance, and the reasoning behind the less obvious rules: [docs/DASHBOARDS_AND_ALERTS.md](docs/DASHBOARDS_AND_ALERTS.md).
+
 ## Endpoints
 
 - `GET /metrics` — Prometheus exposition format, rendered from the in-memory cache. Never triggers an upstream request; scrape latency does not depend on upstream health.

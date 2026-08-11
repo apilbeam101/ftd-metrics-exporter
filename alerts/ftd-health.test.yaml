@@ -1,0 +1,755 @@
+# promtool unit tests for alerts/ftd-health.yaml (IMPLEMENTATION_PLAN.md Stage
+# 15 testing steps 7 and 8). Run with:
+#
+#   promtool test rules alerts/ftd-health.test.yaml
+#
+# Every rule is tested in BOTH directions -- fires against a series crafted to
+# violate it, and does NOT fire otherwise. A one-directional test passes just as
+# well against a rule that fires unconditionally, which is the specific class of
+# bug this file exists to catch (the same "test both ways" discipline the
+# project's redaction and icacls tests already learned).
+#
+# Series values use the real rendered shapes: ratios are 0-1, state sets emit
+# every label value with exactly one set to 1, and an unnamed interface's
+# interface_name equals its interface (the §4.3 fallback).
+
+rule_files:
+  - ftd-health.yaml
+
+evaluation_interval: 1m
+
+tests:
+  # ===========================================================================
+  # FtdExporterDown
+  # ===========================================================================
+  - interval: 1m
+    name: FtdExporterDown fires after 5m of failing polls
+    input_series:
+      - series: 'ftd_exporter_up{instance="exporter:10049",job="ftd"}'
+        values: "0+0x20"
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: FtdExporterDown
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: FtdExporterDown
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              instance: exporter:10049
+              job: ftd
+            exp_annotations:
+              summary: FTD exporter poll cycles are failing (exporter:10049)
+              description: >-
+                ftd_exporter_up has been 0 for over 5 minutes on exporter:10049. The
+                exporter is still serving its last cached snapshot, so device panels
+                may still look populated -- check ftd_exporter_cache_age_seconds for
+                how stale that data actually is, and ftd_exporter_poll_errors_total
+                by reason for why the cycle is failing.
+
+  - interval: 1m
+    name: FtdExporterDown does not fire while polls succeed
+    input_series:
+      - series: 'ftd_exporter_up{instance="exporter:10049",job="ftd"}'
+        values: "1+0x20"
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: FtdExporterDown
+        exp_alerts: []
+
+  - interval: 1m
+    name: FtdExporterDown does not fire on a brief blip shorter than 5m
+    input_series:
+      # Two failing cycles, then recovery -- the escalating-backoff design
+      # (DESIGN.md §2.5) is meant to absorb exactly this without paging.
+      - series: 'ftd_exporter_up{instance="exporter:10049",job="ftd"}'
+        values: "1 1 0 0 1 1 1 1 1 1 1 1 1 1 1"
+    alert_rule_test:
+      - eval_time: 14m
+        alertname: FtdExporterDown
+        exp_alerts: []
+
+  # ===========================================================================
+  # FtdExporterAbsent -- the dead-exporter case (Stage 15 testing step 6).
+  #
+  # Note what these tests deliberately do NOT declare: any `ftd_*` series. That
+  # absence IS the scenario. Every other rule in the file is silent here for the
+  # reason the rule's own comment records -- an instant-vector comparison
+  # against a series that does not exist matches nothing -- so this is the only
+  # rule that can fire, and the third test below asserts that silence directly
+  # rather than leaving it implied.
+  # ===========================================================================
+  - interval: 1m
+    name: FtdExporterAbsent fires when the target stops answering scrapes
+    input_series:
+      - series: 'up{job="ftd-metrics",instance="exporter:10049"}'
+        values: "0+0x20"
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: FtdExporterAbsent
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: FtdExporterAbsent
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              job: ftd-metrics
+              instance: exporter:10049
+            exp_annotations:
+              summary: FTD exporter is not answering scrapes (exporter:10049)
+              description: >-
+                Prometheus has been unable to scrape exporter:10049 for over 5
+                minutes. No FTD metrics are being collected at all, and every other
+                alert in this rule set is silent for the same reason -- their series
+                no longer exist. Check the process/pod/unit, then /healthz.
+
+  - interval: 1m
+    name: FtdExporterAbsent does not fire while the target is being scraped
+    input_series:
+      - series: 'up{job="ftd-metrics",instance="exporter:10049"}'
+        values: "1+0x20"
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: FtdExporterAbsent
+        exp_alerts: []
+
+  - interval: 1m
+    name: FtdExporterAbsent does not fire for an unrelated down target
+    input_series:
+      # The job matcher is why this rule is not simply `up == 0`. A bare
+      # comparison would page for every unrelated broken target in the cluster,
+      # which is how a rule like this gets silenced and then forgotten.
+      - series: 'up{job="node-exporter",instance="host-7:9100"}'
+        values: "0+0x20"
+      - series: 'up{job="ftd-metrics",instance="exporter:10049"}'
+        values: "1+0x20"
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: FtdExporterAbsent
+        exp_alerts: []
+
+  - interval: 1m
+    name: FtdExporterDown is silent when the exporter is gone entirely
+    input_series:
+      # The gap FtdExporterAbsent exists to close, asserted rather than
+      # described: ftd_exporter_up is absent (not 0), so `ftd_exporter_up == 0`
+      # matches nothing. If a future edit ever makes this test fail by
+      # FtdExporterDown firing here, the two rules have stopped being disjoint
+      # and the reasoning in both their comments needs revisiting -- do not
+      # "fix" it by deleting this test.
+      - series: 'up{job="ftd-metrics",instance="exporter:10049"}'
+        values: "0+0x20"
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: FtdExporterDown
+        exp_alerts: []
+      - eval_time: 15m
+        alertname: FtdExporterStale
+        exp_alerts: []
+
+  # ===========================================================================
+  # FtdExporterStale -- the `> 0` guard is the regression this covers.
+  # ===========================================================================
+  - interval: 1m
+    name: FtdExporterStale does not fire at startup before any successful poll
+    input_series:
+      # The gauge's real initial value on a fresh registry, verified directly
+      # against src/metrics/self.ts. Without the `> 0` guard,
+      # `time() - 0 > 300` is true immediately and this alert fires on every
+      # exporter start.
+      - series: 'ftd_exporter_last_successful_poll_timestamp_seconds{instance="exporter:10049"}'
+        values: "0+0x20"
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: FtdExporterStale
+        exp_alerts: []
+
+  - interval: 1m
+    name: FtdExporterStale fires once a real poll timestamp goes stale
+    input_series:
+      # Timestamp frozen at t=60s while evaluation time advances, so the gap
+      # crosses 300s at t=360s and the `for: 5m` satisfies at t=660s.
+      - series: 'ftd_exporter_last_successful_poll_timestamp_seconds{instance="exporter:10049"}'
+        values: "60+0x30"
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: FtdExporterStale
+        exp_alerts: []
+      - eval_time: 12m
+        alertname: FtdExporterStale
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              instance: exporter:10049
+            exp_annotations:
+              summary: FTD exporter has not completed a successful poll in over 5 minutes
+              description: >-
+                The last successful poll on exporter:10049 was 11m 0s ago. Served
+                metrics are stale by at least that much regardless of what the
+                device panels show.
+
+  - interval: 1m
+    name: FtdExporterStale does not fire while polls keep succeeding
+    input_series:
+      # Advances 60 per minute, i.e. tracks wall clock -- a healthy exporter.
+      - series: 'ftd_exporter_last_successful_poll_timestamp_seconds{instance="exporter:10049"}'
+        values: "0+60x30"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: FtdExporterStale
+        exp_alerts: []
+
+  - interval: 1m
+    name: FtdExporterStale pins the 300s threshold -- a gap just under it is silent
+    input_series:
+      # Pins the threshold itself, which the tests above did not: they only
+      # bracketed "healthy" against "very stale", so tightening `> 300` to any
+      # smaller number passed unnoticed. Here the timestamp advances slowly
+      # enough to hold a steady ~240s gap -- under 300s forever, so this rule
+      # must stay silent for the whole window no matter how long it runs.
+      - series: 'ftd_exporter_last_successful_poll_timestamp_seconds{instance="exporter:10049"}'
+        values: "-240+60x40"
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: FtdExporterStale
+        exp_alerts: []
+
+  # ===========================================================================
+  # FtdExporterInsecureTls
+  # ===========================================================================
+  - interval: 1m
+    name: FtdExporterInsecureTls fires when the escape hatch is active
+    input_series:
+      - series: 'ftd_exporter_tls_verification_disabled{instance="exporter:10049"}'
+        values: "1+0x5"
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: FtdExporterInsecureTls
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              instance: exporter:10049
+            exp_annotations:
+              summary: FTD exporter is running with upstream TLS verification disabled
+              description: >-
+                exporter:10049 has FMC_TLS_INSECURE_SKIP_VERIFY=true. Upstream
+                responses are not authenticated and the FMC credential is exposed
+                to an active on-path attacker. Replace with a CA bundle
+                (FMC_CA_BUNDLE_PATH) and a hostname-matching FMC_HOST.
+
+  - interval: 1m
+    name: FtdExporterInsecureTls does not fire with verification enabled
+    input_series:
+      - series: 'ftd_exporter_tls_verification_disabled{instance="exporter:10049"}'
+        values: "0+0x5"
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: FtdExporterInsecureTls
+        exp_alerts: []
+
+  # ===========================================================================
+  # FtdDeviceMetricsStale
+  # ===========================================================================
+  - interval: 1m
+    name: FtdDeviceMetricsStale fires for one stale device while another is current
+    input_series:
+      # Frozen: crosses the 900s threshold at t=900s, `for: 5m` satisfies at
+      # t=1200s (20m).
+      - series: 'ftd_health_window_end_timestamp_seconds{device_uid="u-stale",device_name="ftd-stale"}'
+        values: "0+0x40"
+      # Tracks wall clock -- must not fire, and proves the rule is per-device
+      # rather than fleet-wide.
+      - series: 'ftd_health_window_end_timestamp_seconds{device_uid="u-ok",device_name="ftd-ok"}'
+        values: "0+60x40"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: FtdDeviceMetricsStale
+        exp_alerts: []
+      - eval_time: 25m
+        alertname: FtdDeviceMetricsStale
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              device_uid: u-stale
+              device_name: ftd-stale
+            exp_annotations:
+              summary: FTD device ftd-stale is reporting stale health data
+              description: >-
+                The health sample window for ftd-stale ended 25m 0s ago. If other
+                devices are current, this is a per-device problem (device offline,
+                or its health policy stopped collecting) rather than an exporter
+                problem.
+
+  - interval: 1m
+    name: FtdDeviceMetricsStale pins the 900s threshold -- a gap just under it is silent
+    input_series:
+      # Same gap the case above leaves untested: it brackets "current" against
+      # "very stale", so tightening `> 900` to any smaller number passed
+      # unnoticed. This device holds a steady ~840s gap -- under 900s forever.
+      - series: 'ftd_health_window_end_timestamp_seconds{device_uid="u-near",device_name="ftd-near"}'
+        values: "-840+60x50"
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: FtdDeviceMetricsStale
+        exp_alerts: []
+
+  # ===========================================================================
+  # FtdHighCpu / FtdHighMemory -- ratio scale (0-1) is the regression here.
+  # ===========================================================================
+  - interval: 1m
+    name: FtdHighCpu fires only for component=system above 0.85
+    input_series:
+      - series: 'ftd_cpu_usage_ratio{device_uid="u1",device_name="ftd-1",component="system"}'
+        values: "0.91+0x30"
+      # Snort above threshold must NOT fire on its own -- the deliberate
+      # component="system" scoping.
+      - series: 'ftd_cpu_usage_ratio{device_uid="u1",device_name="ftd-1",component="snort"}'
+        values: "0.97+0x30"
+      - series: 'ftd_cpu_usage_ratio{device_uid="u1",device_name="ftd-1",component="lina"}'
+        values: "0.99+0x30"
+      # A device just under the threshold must not fire.
+      - series: 'ftd_cpu_usage_ratio{device_uid="u2",device_name="ftd-2",component="system"}'
+        values: "0.84+0x30"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: FtdHighCpu
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: FtdHighCpu
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              device_uid: u1
+              device_name: ftd-1
+              component: system
+            exp_annotations:
+              summary: FTD ftd-1 system CPU above 85% for 15m
+              description: >-
+                System CPU on ftd-1 has averaged 91% for 15 minutes. Check the Lina
+                and Snort breakdown on the dashboard -- they imply different
+                responses.
+
+  - interval: 1m
+    name: FtdHighCpu does not fire against a percent-scaled misreading
+    input_series:
+      # If a future edit rewrote the threshold as `> 85` (percent scale), this
+      # 0.91 series would stop firing and the test above would catch it. This
+      # test covers the inverse: a value of 85 on the *ratio* scale is nonsense
+      # data, but must not be silently treated as 85%.
+      - series: 'ftd_cpu_usage_ratio{device_uid="u3",device_name="ftd-3",component="system"}'
+        values: "0.10+0x30"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: FtdHighCpu
+        exp_alerts: []
+
+  - interval: 1m
+    name: FtdHighMemory fires above 0.90 for system only
+    input_series:
+      - series: 'ftd_memory_usage_ratio{device_uid="u1",device_name="ftd-1",component="system"}'
+        values: "0.95+0x30"
+      - series: 'ftd_memory_usage_ratio{device_uid="u1",device_name="ftd-1",component="lina"}'
+        values: "0.99+0x30"
+      - series: 'ftd_memory_usage_ratio{device_uid="u2",device_name="ftd-2",component="system"}'
+        values: "0.89+0x30"
+    alert_rule_test:
+      # Pins `for: 15m` rather than only the eventual firing state, which the
+      # first draft of this case omitted -- shortening the `for` to any smaller
+      # duration passed the whole suite unnoticed. At 10m the condition has held
+      # for less than 15m, so the alert must still be pending, not firing.
+      - eval_time: 10m
+        alertname: FtdHighMemory
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: FtdHighMemory
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              device_uid: u1
+              device_name: ftd-1
+              component: system
+            exp_annotations:
+              summary: FTD ftd-1 system memory above 90% for 15m
+              description: System memory on ftd-1 has averaged 95% for 15 minutes.
+
+  # ===========================================================================
+  # FtdDiskNearFull
+  # ===========================================================================
+  - interval: 1m
+    name: FtdDiskNearFull fires above 0.90 and not below
+    input_series:
+      - series: 'ftd_disk_usage_ratio{device_uid="u1",device_name="ftd-1"}'
+        values: "0.93+0x20"
+      - series: 'ftd_disk_usage_ratio{device_uid="u2",device_name="ftd-2"}'
+        values: "0.90+0x20"
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: FtdDiskNearFull
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: FtdDiskNearFull
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              device_uid: u1
+              device_name: ftd-1
+            exp_annotations:
+              summary: FTD ftd-1 disk above 90% full
+              description: Disk usage on ftd-1 is 93%.
+
+  # ===========================================================================
+  # FtdInterfaceDown -- Stage 15 testing step 8, the named-interface filter.
+  # This is the cross-layer test: it depends on the Stage 3 interface_name
+  # fallback behavior (§4.3) being exactly what collector.ts implements.
+  # ===========================================================================
+  - interval: 1m
+    name: FtdInterfaceDown fires for a named interface but not an unnamed one
+    input_series:
+      # Named and down -> must fire.
+      - series: 'ftd_interface_operational_up{device_uid="u1",device_name="ftd-1",interface="Ethernet1/1",interface_name="outside",interface_type="Ethernet"}'
+        values: "0+0x20"
+      # UNNAMED and down: interface_name fell back to the hardware id, exactly
+      # as src/metrics/collector.ts renders it for an unconfigured interface.
+      # Must NOT fire -- this is the noise-avoidance property. Removing the
+      # `unless` clause makes this test fail.
+      - series: 'ftd_interface_operational_up{device_uid="u1",device_name="ftd-1",interface="Ethernet1/8",interface_name="Ethernet1/8",interface_type="Ethernet"}'
+        values: "0+0x20"
+      # Named and up -> must not fire.
+      - series: 'ftd_interface_operational_up{device_uid="u1",device_name="ftd-1",interface="Ethernet1/2",interface_name="inside",interface_type="Ethernet"}'
+        values: "1+0x20"
+      # A *different device* with an unnamed interface bearing the same
+      # hardware id as device 1's named one. The `on(device_uid, interface)`
+      # matcher must keep these independent -- matching on `interface` alone
+      # would let this device's fallback series suppress device 1's real alert.
+      - series: 'ftd_interface_operational_up{device_uid="u2",device_name="ftd-2",interface="Ethernet1/1",interface_name="Ethernet1/1",interface_type="Ethernet"}'
+        values: "0+0x20"
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: FtdInterfaceDown
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: FtdInterfaceDown
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              device_uid: u1
+              device_name: ftd-1
+              interface: Ethernet1/1
+              interface_name: outside
+              interface_type: Ethernet
+            exp_annotations:
+              summary: FTD interface outside down on ftd-1
+              description: >-
+                Named interface outside (Ethernet1/1) on ftd-1 has been
+                operationally down for 5 minutes. Unnamed/unused interfaces are
+                excluded from this rule by design -- see the comment above it.
+
+  # ===========================================================================
+  # FtdInterfaceDown, hostile-input regressions for the two non-obvious pieces
+  # of the filter expression. Both of these passed *vacuously* against the
+  # naive form of the rule -- a review found the naive form aborts or
+  # over-suppresses, and these are the inputs that prove it.
+  # ===========================================================================
+  - interval: 1m
+    name: FtdInterfaceDown survives two interfaces on one device sharing an interface_name
+    input_series:
+      # label_replace overwrites `interface` with `interface_name`, so without
+      # the `max by (...)` fold on the RHS these two collapse to one labelset
+      # and PromQL aborts the ENTIRE rule with "vector cannot contain metrics
+      # with the same labelset" -- silencing the rule for the whole fleet, not
+      # just this pair. Deleting the `max by` makes this test error out.
+      - series: 'ftd_interface_operational_up{job="ftd-metrics",instance="e:10049",device_uid="u1",device_name="ftd-1",interface="Ethernet1/1",interface_name="outside"}'
+        values: "0+0x20"
+      - series: 'ftd_interface_operational_up{job="ftd-metrics",instance="e:10049",device_uid="u1",device_name="ftd-1",interface="Ethernet1/2",interface_name="outside"}'
+        values: "0+0x20"
+      # An unrelated, healthy device whose alert must survive the collision
+      # above. This series is what makes the blast radius visible: the naive
+      # form aborts before this one is ever evaluated.
+      - series: 'ftd_interface_operational_up{job="ftd-metrics",instance="e:10049",device_uid="u2",device_name="ftd-2",interface="Ethernet1/9",interface_name="dmz"}'
+        values: "0+0x20"
+      # Still unnamed, still suppressed -- the fold must not weaken the filter.
+      - series: 'ftd_interface_operational_up{job="ftd-metrics",instance="e:10049",device_uid="u2",device_name="ftd-2",interface="Ethernet1/5",interface_name="Ethernet1/5"}'
+        values: "0+0x20"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: FtdInterfaceDown
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: ftd-metrics
+              instance: e:10049
+              device_uid: u1
+              device_name: ftd-1
+              interface: Ethernet1/1
+              interface_name: outside
+            exp_annotations:
+              summary: FTD interface outside down on ftd-1
+              description: >-
+                Named interface outside (Ethernet1/1) on ftd-1 has been
+                operationally down for 5 minutes. Unnamed/unused interfaces are
+                excluded from this rule by design -- see the comment above it.
+          - exp_labels:
+              severity: warning
+              job: ftd-metrics
+              instance: e:10049
+              device_uid: u1
+              device_name: ftd-1
+              interface: Ethernet1/2
+              interface_name: outside
+            exp_annotations:
+              summary: FTD interface outside down on ftd-1
+              description: >-
+                Named interface outside (Ethernet1/2) on ftd-1 has been
+                operationally down for 5 minutes. Unnamed/unused interfaces are
+                excluded from this rule by design -- see the comment above it.
+          - exp_labels:
+              severity: warning
+              job: ftd-metrics
+              instance: e:10049
+              device_uid: u2
+              device_name: ftd-2
+              interface: Ethernet1/9
+              interface_name: dmz
+            exp_annotations:
+              summary: FTD interface dmz down on ftd-2
+              description: >-
+                Named interface dmz (Ethernet1/9) on ftd-2 has been
+                operationally down for 5 minutes. Unnamed/unused interfaces are
+                excluded from this rule by design -- see the comment above it.
+
+  - interval: 1m
+    name: FtdInterfaceDown keeps suppression per-exporter, not across instances
+    input_series:
+      # Two exporters scraping the same device -- an HA/rollout overlap, or an
+      # FMC and an SCC exporter covering one fleet. Exporter e2 reports the
+      # §4.3 hardware-id fallback for the same interface e1 reports by name.
+      # Without `job, instance` in the `unless on(...)` list, e2's fallback
+      # series suppresses e1's genuine alert entirely and this test's
+      # expectation goes empty. Removing them makes this test fail.
+      - series: 'ftd_interface_operational_up{job="ftd-metrics",instance="e1:10049",device_uid="u1",device_name="ftd-1",interface="Ethernet1/1",interface_name="outside"}'
+        values: "0+0x20"
+      - series: 'ftd_interface_operational_up{job="ftd-metrics",instance="e2:10049",device_uid="u1",device_name="ftd-1",interface="Ethernet1/1",interface_name="Ethernet1/1"}'
+        values: "0+0x20"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: FtdInterfaceDown
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: ftd-metrics
+              instance: e1:10049
+              device_uid: u1
+              device_name: ftd-1
+              interface: Ethernet1/1
+              interface_name: outside
+            exp_annotations:
+              summary: FTD interface outside down on ftd-1
+              description: >-
+                Named interface outside (Ethernet1/1) on ftd-1 has been
+                operationally down for 5 minutes. Unnamed/unused interfaces are
+                excluded from this rule by design -- see the comment above it.
+
+  - interval: 1m
+    name: FtdInterfaceDown suppresses an interface whose interface_name is empty
+    input_series:
+      # An empty interface_name cannot equal a non-empty hardware id, so it is
+      # not the fallback case and the series correctly SURVIVES the unless and
+      # fires. Asserted rather than left to chance because the collector's
+      # non-empty-label guard (DESIGN.md §4.3) is what makes this shape
+      # unreachable in practice -- if that guard ever regressed, this documents
+      # what the rule would then do rather than leaving it a surprise.
+      #
+      # Note the capture group's width is NOT load-bearing here: because the
+      # `max by (...)` fold drops `interface` from the RHS before label_replace
+      # runs, `(.*)` and `(.+)` produce identical firing sets on every
+      # interface_name shape (verified side by side with promtool). Pre-fold it
+      # did matter, and a `(.*)` -> `(.+)` mutation went uncaught.
+      - series: 'ftd_interface_operational_up{job="ftd-metrics",instance="e:10049",device_uid="u1",device_name="ftd-1",interface="Ethernet1/3",interface_name=""}'
+        values: "0+0x20"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: FtdInterfaceDown
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: ftd-metrics
+              instance: e:10049
+              device_uid: u1
+              device_name: ftd-1
+              interface: Ethernet1/3
+            exp_annotations:
+              summary: FTD interface  down on ftd-1
+              description: >-
+                Named interface  (Ethernet1/3) on ftd-1 has been operationally
+                down for 5 minutes. Unnamed/unused interfaces are excluded from
+                this rule by design -- see the comment above it.
+
+  # ===========================================================================
+  # FtdInterfaceErrors -- same filter, so same both-directions coverage.
+  # ===========================================================================
+  - interval: 1m
+    name: FtdInterfaceErrors fires for a named interface only
+    input_series:
+      - series: 'ftd_interface_input_errors_avg{device_uid="u1",device_name="ftd-1",interface="Ethernet1/1",interface_name="outside",interface_type="Ethernet"}'
+        values: "5+0x30"
+      # Unnamed with errors -> must not fire.
+      - series: 'ftd_interface_input_errors_avg{device_uid="u1",device_name="ftd-1",interface="Ethernet1/8",interface_name="Ethernet1/8",interface_type="Ethernet"}'
+        values: "9+0x30"
+      # Named, zero errors -> must not fire.
+      - series: 'ftd_interface_input_errors_avg{device_uid="u1",device_name="ftd-1",interface="Ethernet1/2",interface_name="inside",interface_type="Ethernet"}'
+        values: "0+0x30"
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: FtdInterfaceErrors
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: FtdInterfaceErrors
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              device_uid: u1
+              device_name: ftd-1
+              interface: Ethernet1/1
+              interface_name: outside
+              interface_type: Ethernet
+            exp_annotations:
+              summary: FTD interface outside reporting input errors on ftd-1
+              description: >-
+                outside (Ethernet1/1) on ftd-1 has averaged 5 input errors over the
+                sample window, sustained for 15 minutes. Usually physical: cable,
+                SFP, or duplex mismatch.
+
+  # ===========================================================================
+  # FtdHaNotNormal -- full state set, as collector.ts actually renders it.
+  # ===========================================================================
+  - interval: 1m
+    name: FtdHaNotNormal fires for an error-state node and not a normal one
+    input_series:
+      # Device 1: state set with error=1, normal=0 -> must fire.
+      - series: 'ftd_ha_node_status{device_uid="u1",device_name="ftd-1",status="normal"}'
+        values: "0+0x20"
+      - series: 'ftd_ha_node_status{device_uid="u1",device_name="ftd-1",status="error"}'
+        values: "1+0x20"
+      - series: 'ftd_ha_node_status{device_uid="u1",device_name="ftd-1",status="warning"}'
+        values: "0+0x20"
+      - series: 'ftd_ha_node_status{device_uid="u1",device_name="ftd-1",status="disabled"}'
+        values: "0+0x20"
+      - series: 'ftd_ha_node_status{device_uid="u1",device_name="ftd-1",status="unknown"}'
+        values: "0+0x20"
+      # Device 2: normal=1 -> must not fire. Only the normal series is needed
+      # for the rule, but the zeros are what the exporter really emits.
+      - series: 'ftd_ha_node_status{device_uid="u2",device_name="ftd-2",status="normal"}'
+        values: "1+0x20"
+      - series: 'ftd_ha_node_status{device_uid="u2",device_name="ftd-2",status="error"}'
+        values: "0+0x20"
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: FtdHaNotNormal
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: FtdHaNotNormal
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              device_uid: u1
+              device_name: ftd-1
+              status: normal
+            exp_annotations:
+              summary: FTD HA node ftd-1 is not in NORMAL state
+              description: >-
+                ftd-1 has not reported HA status NORMAL for 5 minutes. Query
+                ftd_ha_node_status{device_name="ftd-1"} to see which state is
+                currently 1, and ftd_ha_node_info for its role.
+
+  - interval: 1m
+    name: FtdHaNotNormal is silent on a fleet with no HA at all
+    input_series:
+      # No ftd_ha_node_status series exist -- a non-HA fleet. DESIGN.md §4.8:
+      # conditional groups are absent, not zero. An unrelated series is present
+      # so the test has input at all.
+      - series: 'ftd_cpu_usage_ratio{device_uid="u1",device_name="ftd-1",component="system"}'
+        values: "0.1+0x20"
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: FtdHaNotNormal
+        exp_alerts: []
+
+  # ===========================================================================
+  # FtdS2sTunnelDown
+  # ===========================================================================
+  - interval: 1m
+    name: FtdS2sTunnelDown fires for a down tunnel and not an up one
+    input_series:
+      - series: 'ftd_s2s_tunnel_state{device_uid="u1",device_name="ftd-1",tunnel_id="t1",tunnel_name="hq-to-branch-1",state="up"}'
+        values: "1+0x20"
+      - series: 'ftd_s2s_tunnel_state{device_uid="u1",device_name="ftd-1",tunnel_id="t1",tunnel_name="hq-to-branch-1",state="down"}'
+        values: "0+0x20"
+      - series: 'ftd_s2s_tunnel_state{device_uid="u1",device_name="ftd-1",tunnel_id="t2",tunnel_name="hq-to-branch-2",state="up"}'
+        values: "0+0x20"
+      - series: 'ftd_s2s_tunnel_state{device_uid="u1",device_name="ftd-1",tunnel_id="t2",tunnel_name="hq-to-branch-2",state="down"}'
+        values: "1+0x20"
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: FtdS2sTunnelDown
+        exp_alerts: []
+      - eval_time: 15m
+        alertname: FtdS2sTunnelDown
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              device_uid: u1
+              device_name: ftd-1
+              tunnel_id: t2
+              tunnel_name: hq-to-branch-2
+              state: down
+            exp_annotations:
+              summary: FTD S2S tunnel hq-to-branch-2 down on ftd-1
+              description: >-
+                Site-to-site tunnel hq-to-branch-2 on ftd-1 has been down for 10
+                minutes.
+
+  # ===========================================================================
+  # FtdChassisPsuFailure
+  # ===========================================================================
+  - interval: 1m
+    name: FtdChassisPsuFailure fires on a failed output and not on healthy PSUs
+    input_series:
+      - series: 'ftd_chassis_psu_input_up{device_uid="u1",device_name="ftd-1",psu="1"}'
+        values: "1+0x20"
+      - series: 'ftd_chassis_psu_output_up{device_uid="u1",device_name="ftd-1",psu="1"}'
+        values: "1+0x20"
+      # PSU 2 output failed -> must fire (matches the all-groups golden
+      # fixture, which has psu 2 output at 0).
+      - series: 'ftd_chassis_psu_input_up{device_uid="u1",device_name="ftd-1",psu="2"}'
+        values: "1+0x20"
+      - series: 'ftd_chassis_psu_output_up{device_uid="u1",device_name="ftd-1",psu="2"}'
+        values: "0+0x20"
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: FtdChassisPsuFailure
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: FtdChassisPsuFailure
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              device_uid: u1
+              device_name: ftd-1
+              psu: "2"
+            exp_annotations:
+              summary: FTD chassis PSU 2 failure on ftd-1
+              description: >-
+                PSU 2 on ftd-1 reports input or output down. Check both
+                ftd_chassis_psu_input_up{psu="2"} and
+                ftd_chassis_psu_output_up{psu="2"} -- this rule is a union of the
+                two and does not distinguish which failed.
+
+  - interval: 1m
+    name: FtdChassisPsuFailure is silent on an appliance with no chassis
+    input_series:
+      - series: 'ftd_cpu_usage_ratio{device_uid="u1",device_name="ftd-appliance",component="system"}'
+        values: "0.1+0x20"
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: FtdChassisPsuFailure
+        exp_alerts: []

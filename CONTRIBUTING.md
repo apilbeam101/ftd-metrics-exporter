@@ -25,6 +25,27 @@ Two `tsconfig`s exist on purpose: [tsconfig.json](tsconfig.json) builds `src/` o
 
 CI (`.github/workflows/ci.yml`) runs the same checks across `ubuntu-latest`/`macos-latest`/`windows-latest` and Node 24/current. A PR is expected to pass the fast Linux-only leg (typecheck, lint, unit) before the full matrix runs.
 
+## Generated files
+
+Three files are generated and must not be hand-edited. Each has a test or CI job that fails if the committed copy drifts from its generator:
+
+```
+node --experimental-strip-types scripts/generate-metrics-doc.ts   # -> docs/METRICS.md
+node --experimental-strip-types scripts/generate-dashboard.ts     # -> dashboards/ftd-health.json
+node --experimental-strip-types scripts/sanitize-fixtures.ts      # -> test/fixtures/ (from .scratch/ captures)
+```
+
+Edit the generator, regenerate, and commit both. For the dashboard specifically, the procedure for round-tripping a change you prototyped in the Grafana UI is in [docs/DASHBOARDS_AND_ALERTS.md](docs/DASHBOARDS_AND_ALERTS.md#round-tripping-a-change-made-in-the-grafana-ui) — don't paste a Grafana export in directly, it carries instance-specific `id`/`version` fields and will fail the byte-identical check.
+
+If you change an alert rule in [alerts/ftd-health.yaml](alerts/ftd-health.yaml), update [alerts/ftd-health.test.yaml](alerts/ftd-health.test.yaml) alongside it and verify locally:
+
+```
+promtool check rules alerts/ftd-health.yaml
+promtool test rules alerts/ftd-health.test.yaml
+```
+
+Both run in CI (job `alerts`). Every rule is expected to be tested in **both** directions — fires against a violating series, stays silent otherwise. A one-directional test passes just as well against a rule that fires unconditionally, which is the specific bug class that file exists to catch.
+
 ## Coding standards
 
 - Pure functions (response mappers, the metrics renderer) validate their input as `unknown`, never trust the wire-schema type as already checked.

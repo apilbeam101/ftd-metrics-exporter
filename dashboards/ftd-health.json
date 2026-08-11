@@ -1,0 +1,3038 @@
+{
+  "__generated_by": "scripts/generate-dashboard.ts — do not hand-edit this file; edit the generator and regenerate (see docs/DASHBOARDS_AND_ALERTS.md).",
+  "title": "Cisco FTD fleet health",
+  "uid": "ftd-health",
+  "description": "Cisco FTD firewall fleet health, from ftd-metrics-exporter. Exporter health is row 1 and deliberately first: a dashboard that looks green while the exporter is dead is the worst possible outcome. Conditional rows (HA, VPN, chassis) are empty on fleets without that capability — that is expected, not a fault, and each such panel says so in place of \"No data\". CAVEATS: chassis/HA/VPN panels are built against synthetic data and are experimental in v1 (DESIGN.md §13); interface throughput axis units are unresolved (DESIGN.md §14.4); and all thresholds are documented starting points, not universal truths.",
+  "tags": [
+    "cisco",
+    "ftd",
+    "firewall",
+    "prometheus"
+  ],
+  "editable": true,
+  "graphTooltip": 1,
+  "schemaVersion": 39,
+  "version": 1,
+  "weekStart": "",
+  "timezone": "browser",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "refresh": "1m",
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "DS_PROMETHEUS",
+        "label": "Prometheus",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {},
+        "hide": 0,
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false
+      },
+      {
+        "name": "job",
+        "label": "Job",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "definition": "label_values(ftd_exporter_up, job)",
+        "query": {
+          "query": "label_values(ftd_exporter_up, job)",
+          "refId": "job"
+        },
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "refresh": 1,
+        "sort": 1,
+        "hide": 0,
+        "skipUrlSync": false
+      },
+      {
+        "name": "instance",
+        "label": "Exporter instance",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "definition": "label_values(ftd_exporter_up{job=~\"$job\"}, instance)",
+        "query": {
+          "query": "label_values(ftd_exporter_up{job=~\"$job\"}, instance)",
+          "refId": "instance"
+        },
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "refresh": 1,
+        "sort": 1,
+        "hide": 0,
+        "skipUrlSync": false
+      },
+      {
+        "name": "device",
+        "label": "Device",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "definition": "label_values(ftd_cpu_usage_ratio{job=~\"$job\",instance=~\"$instance\"}, device_name)",
+        "query": {
+          "query": "label_values(ftd_cpu_usage_ratio{job=~\"$job\",instance=~\"$instance\"}, device_name)",
+          "refId": "device"
+        },
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "refresh": 1,
+        "sort": 1,
+        "hide": 0,
+        "skipUrlSync": false
+      },
+      {
+        "name": "interface",
+        "label": "Interface",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "definition": "label_values(ftd_interface_operational_up{job=~\"$job\",instance=~\"$instance\",device_name=~\"$device\"}, interface)",
+        "query": {
+          "query": "label_values(ftd_interface_operational_up{job=~\"$job\",instance=~\"$instance\",device_name=~\"$device\"}, interface)",
+          "refId": "interface"
+        },
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "refresh": 1,
+        "sort": 1,
+        "hide": 0,
+        "skipUrlSync": false
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "Fleet overview — exporter health first",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "panels": []
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Exporter up",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 0,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "DOWN",
+                  "color": "red",
+                  "index": 0
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "1": {
+                  "text": "UP",
+                  "color": "green",
+                  "index": 1
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          },
+          "noValue": "NOT SCRAPED"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "description": "Whether the most recent poll *cycle* succeeded. Note this is not the conventional Prometheus `up` semantic (DESIGN.md §11): a healthy exporter serving a 10-minute-old cache still reads 1, and an exporter reading 0 may still be serving perfectly usable cached data. Read it alongside \"Cache age\" and \"Last successful poll\" — never on its own.",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A",
+          "expr": "min(ftd_exporter_up{job=~\"$job\",instance=~\"$instance\"})",
+          "legendFormat": "up",
+          "instant": true,
+          "range": false,
+          "editorMode": "code"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Cache age",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 3,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 120
+              },
+              {
+                "color": "red",
+                "value": 300
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "description": "How old the snapshot currently being served is. This is the metric that answers \"how stale is what I am looking at\" — `ftd_exporter_up` does not. Amber past 2x a 60s poll interval, red past 5x; adjust to your own POLL_INTERVAL_SECONDS.",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A",
+          "expr": "max(ftd_exporter_cache_age_seconds{job=~\"$job\",instance=~\"$instance\"})",
+          "legendFormat": "cache age",
+          "instant": true,
+          "range": false,
+          "editorMode": "code"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Last successful poll",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 6,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "unit": "s",
+          "noValue": "never (no successful poll yet)",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 300
+              },
+              {
+                "color": "red",
+                "value": 900
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "description": "Time since the last poll cycle that actually succeeded. Reads \"never\" until the first success — the underlying gauge is 0 on a freshly started exporter, which is also why the FtdExporterStale alert carries an explicit `> 0` guard.",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A",
+          "expr": "time() - max(ftd_exporter_last_successful_poll_timestamp_seconds{job=~\"$job\",instance=~\"$instance\"} > 0)",
+          "legendFormat": "since last success",
+          "instant": true,
+          "range": false,
+          "editorMode": "code"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Poll error rate",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 9,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "unit": "reqps",
+          "decimals": 4,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.0001
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "description": "Poll cycle failures per second over 5m, all reasons combined. Broken down by reason in row 8.",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A",
+          "expr": "sum(rate(ftd_exporter_poll_errors_total{job=~\"$job\",instance=~\"$instance\"}[5m]))",
+          "legendFormat": "errors/s",
+          "instant": true,
+          "range": false,
+          "editorMode": "code"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Devices reporting",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 12,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "none",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "description": "Devices in the current snapshot (`ftd_exporter_devices`). On the FMC backend, compare against \"Devices discovered\" in row 8 — a gap between them is the per-device-failure / pagination signal.",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A",
+          "expr": "sum(ftd_exporter_devices{job=~\"$job\",instance=~\"$instance\"})",
+          "legendFormat": "devices",
+          "instant": true,
+          "range": false,
+          "editorMode": "code"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "stat",
+      "title": "Devices with an unhealthy signal",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 16,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "unit": "short",
+          "noValue": "0",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "description": "Distinct devices currently over any resource threshold (system CPU > 85%, system memory > 90%, or disk > 90%) — the same thresholds the alert rules use. Counted via `count by (device_uid)` so a device breaching two thresholds at once counts once, not twice.",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A",
+          "expr": "count(count by (device_uid) (\n  (ftd_cpu_usage_ratio{job=~\"$job\",instance=~\"$instance\",device_name=~\"$device\",component=\"system\"} > 0.85)\n    or (ftd_memory_usage_ratio{job=~\"$job\",instance=~\"$instance\",device_name=~\"$device\",component=\"system\"} > 0.90)\n    or (ftd_disk_usage_ratio{job=~\"$job\",instance=~\"$instance\",device_name=~\"$device\"} > 0.90)\n))",
+          "legendFormat": "unhealthy",
+          "instant": true,
+          "range": false,
+          "editorMode": "code"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "stat",
+      "title": "Named interfaces down",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 2,
+        "x": 20,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "unit": "short",
+          "noValue": "0",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "description": "Fleet-wide count of operationally-down interfaces that have a real configured name. Unnamed/unused interfaces are excluded — they are legitimately down and would otherwise dominate this number (DESIGN.md §4.2 exports every interface by design). Uses the same PromQL filter as the FtdInterfaceDown alert, so this panel and that alert can never disagree.",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A",
+          "expr": "count(\nftd_interface_operational_up{job=~\"$job\",instance=~\"$instance\",device_name=~\"$device\",interface=~\"$interface\"} == 0\n  unless on(job, instance, device_uid, interface)\n    label_replace(\n      max by (job, instance, device_uid, interface_name) (ftd_interface_operational_up{job=~\"$job\",instance=~\"$instance\",device_name=~\"$device\",interface=~\"$interface\"}),\n      \"interface\", \"$1\", \"interface_name\", \"(.*)\"\n    )\n)",
+          "legendFormat": "down",
+          "instant": true,
+          "range": false,
+          "editorMode": "code"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "stat",
+      "title": "S2S tunnels down",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 2,
+        "x": 22,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "unit": "short",
+          "noValue": "No VPN data — expected unless RA VPN or site-to-site VPN is configured (not a fault).",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "description": "Site-to-site tunnels currently reporting state \"down\" — the number an operator actually wants at 3am. Empty rather than 0 when no VPN is configured at all.\n\n**Experimental in v1.** The upstream field mapping behind this panel is validated against synthetic data only (DESIGN.md §13/§14.1) — treat unexpected values as a possible mapping bug and please report them with a `--dump-raw` capture.",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A",
+          "expr": "count(ftd_s2s_tunnel_state{job=~\"$job\",instance=~\"$instance\",device_name=~\"$device\",state=\"down\"} == 1)",
+          "legendFormat": "tunnels down",
+          "instant": true,
+          "range": false,
+          "editorMode": "code"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "table",
+      "title": "Per-device summary",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 5
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "filterable": true
+          },
+          "noValue": "—"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "(CPU|Memory|Disk).*"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percentunit"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 0.7
+                    },
+                    {
+                      "color": "red",
+                      "value": 0.85
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Named ifaces down"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "red",
+                      "value": 1
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "fields": ""
+        }
+      },
+      "description": "The visual anchor of the dashboard (DESIGN.md §10.2): one row per device with system CPU, memory, disk, HA status/role, and named-interfaces-down count, cell-coloured by the same thresholds as the alerts. HA columns are empty for non-HA devices, which is expected rather than a fault.",
+      "transformations": [
+        {
+          "id": "joinByField",
+          "options": {
+            "byField": "device_name",
+            "mode": "outer"
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "Time 1": true,
+              "Time 2": true,
+              "Time 3": true,
+              "Time 4": true,
+              "Time 5": true,
+              "Time 6": true,
+              "device_uid": true,
+              "device_uid 1": true,
+              "device_uid 2": true,
+              "device_uid 3": true,
+              "device_uid 4": true,
+              "device_uid 5": true,
+              "device_uid 6": true,
+              "component": true,
+              "component 1": true,
+              "component 2": true,
+              "node_type": true
+            },
+            "renameByName": {
+              "device_name": "Device",
+              "Value #A": "CPU (system)",
+              "Value #B": "Memory (system)",
+              "Value #C": "Disk",
+              "status": "HA status",
+              "Value #D": "",
+              "Value #E": "",
+              "Value #F": "Named ifaces down"
+            }
+          }
+        }
+      ],
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A",
+          "expr": "ftd_cpu_usage_ratio{job=~\"$job\",instance=~\"$instance\",device_name=~\"$device\",component=\"system\"}",
+          "legendFormat": "cpu",
+          "instant": true,
+          "range": false,
+          "editorMode": "code"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "B",
+          "expr": "ftd_memory_usage_ratio{job=~\"$job\",instance=~\"$instance\",device_name=~\"$device\",component=\"system\"}",
+          "legendFormat": "memory",
+          "instant": true,
+          "range": false,
+          "editorMode": "code"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "C",
+          "expr": "ftd_disk_usage_ratio{job=~\"$job\",instance=~\"$instance\",device_name=~\"$device\"}",
+          "legendFormat": "disk",
+          "instant": true,
+          "range": false,
+          "editorMode": "code"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "D",
+          "expr": "ftd_ha_node_status{job=~\"$job\",instance=~\"$instance\",device_name=~\"$device\"} == 1",
+          "legendFormat": "ha_status",
+          "instant": true,
+          "range": false,
+          "editorMode": "code"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "E",
+          "expr": "ftd_ha_node_info{job=~\"$job\",instance=~\"$instance\",device_name=~\"$device\"} == 1",
+          "legendFormat": "ha_role",
+          "instant": true,
+          "range": false,
+          "editorMode": "code"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "F",
+          "expr": "count by (device_uid, device_name) (\nftd_interface_operational_up{job=~\"$job\",instance=~\"$instance\",device_name=~\"$device\",interface=~\"$interface\"} == 0\n  unless on(job, instance, device_uid, interface)\n    label_replace(\n      max by (job, instance, device_uid, interface_name) (ftd_interface_operational_up{job=~\"$job\",instance=~\"$instance\",device_name=~\"$device\",interface=~\"$interface\"}),\n      \"interface\", \"$1\", \"interface_name\", \"(.*)\"\n    )\n)",
+          "legendFormat": "ifaces_down",
+          "instant": true,
+          "range": false,
+          "editorMode": "code"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "row",
+      "title": "CPU and memory",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 15
+      },
+      "panels": []
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "CPU by component",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 16
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 5,
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "One series per component per device. Lina (the data plane) and Snort (inspection) are deliberately not summed: sustained high Snort is often normal under inspection load, whereas sustained high Lina points at the data path. `system` is what the alert rules threshold on.",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A",
+          "expr": "ftd_cpu_usage_ratio{job=~\"$job\",instance=~\"$instance\",device_name=~\"$device\"}",
+          "legendFormat": "{{device_name}} — {{component}}",
+          "instant": false,
+          "range": true,
+          "editorMode": "code"
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "Memory by component",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 16
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 5,
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "Same shape as CPU: one series per component per device.",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A",
+          "expr": "ftd_memory_usage_ratio{job=~\"$job\",instance=~\"$instance\",device_name=~\"$device\"}",
+          "legendFormat": "{{device_name}} — {{component}}",
+          "instant": false,
+          "range": true,
+          "editorMode": "code"
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "type": "gauge",
+      "title": "Current system CPU",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 0,
+        "y": 24
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.7
+              },
+              {
+                "color": "red",
+                "value": 0.85
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "description": "Thresholds are 70/85% — documented DEFAULTS, not universal truths (DESIGN.md §10.3). A device that legitimately runs hot needs its own numbers.",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A",
+          "expr": "ftd_cpu_usage_ratio{job=~\"$job\",instance=~\"$instance\",device_name=~\"$device\",component=\"system\"}",
+          "legendFormat": "{{device_name}}",
+          "instant": true,
+          "range": false,
+          "editorMode": "code"
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "type": "gauge",
+      "title": "Current system memory",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 6,
+        "y": 24
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.7
+              },
+              {
+                "color": "red",
+                "value": 0.85
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "description": "Thresholds 70/85% as defaults; the memory alert pages at 90%.",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A",
+          "expr": "ftd_memory_usage_ratio{job=~\"$job\",instance=~\"$instance\",device_name=~\"$device\",component=\"system\"}",
+          "legendFormat": "{{device_name}}",
+          "instant": true,
+          "range": false,
+          "editorMode": "code"
+        }
+      ]
+    },
+    {
+      "id": 16,
+      "type": "bargauge",
+      "title": "Top 10 devices by system CPU",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 12,
+        "y": 24
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.7
+              },
+              {
+                "color": "red",
+                "value": 0.85
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "displayMode": "gradient",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "description": "For fleets too large to eyeball in the timeseries above.",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A",
+          "expr": "topk(10, ftd_cpu_usage_ratio{job=~\"$job\",instance=~\"$instance\",device_name=~\"$device\",component=\"system\"})",
+          "legendFormat": "{{device_name}}",
+          "instant": true,
+          "range": false,
+          "editorMode": "code"
+        }
+      ]
+    },
+    {
+      "id": 17,
+      "type": "row",
+      "title": "Disk",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 30
+      },
+      "panels": []
+    },
+    {
+      "id": 18,
+      "type": "gauge",
+      "title": "Current disk usage",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 0,
+        "y": 31
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.75
+              },
+              {
+                "color": "red",
+                "value": 0.9
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "description": "Thresholds 75/90% (DESIGN.md §10.2). A full disk on FTD affects logging and deployment, not just metrics — hence the critical severity on the matching alert.",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A",
+          "expr": "ftd_disk_usage_ratio{job=~\"$job\",instance=~\"$instance\",device_name=~\"$device\"}",
+          "legendFormat": "{{device_name}}",
+          "instant": true,
+          "range": false,
+          "editorMode": "code"
+        }
+      ]
+    },
+    {
+      "id": 19,
+      "type": "timeseries",
+      "title": "Disk usage trend",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 16,
+        "x": 8,
+        "y": 31
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 5,
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.75
+              },
+              {
+                "color": "red",
+                "value": 0.9
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "Where slow-growth problems are visible. A steadily rising line over days is the signal here — the gauge on the left cannot show it.",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A",
+          "expr": "ftd_disk_usage_ratio{job=~\"$job\",instance=~\"$instance\",device_name=~\"$device\"}",
+          "legendFormat": "{{device_name}}",
+          "instant": false,
+          "range": true,
+          "editorMode": "code"
+        }
+      ]
+    },
+    {
+      "id": 20,
+      "type": "row",
+      "title": "Interfaces",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 38
+      },
+      "panels": []
+    },
+    {
+      "id": 21,
+      "type": "timeseries",
+      "title": "Throughput (mirrored: in above, out below)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 39
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "axisSoftMin": 0
+          },
+          "unit": "bytes"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^out — .*"
+            },
+            "properties": [
+              {
+                "id": "custom.transform",
+                "value": "negative-Y"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "Conventional mirrored view — inbound positive, outbound negative via a per-series transform.\n\n**Unit caveat (DESIGN.md §14.4, unresolved):** it is not yet confirmed whether the upstream `*_bytes_avg` fields are a rate (bytes/second) or a total over the averaging window. The axis is therefore labelled in bytes without a per-second denominator. Do not read this axis as throughput until §14.4 is resolved — compare two window sizes if you need to know which it is.",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A",
+          "expr": "ftd_interface_input_bytes_avg{job=~\"$job\",instance=~\"$instance\",device_name=~\"$device\",interface=~\"$interface\"}",
+          "legendFormat": "in — {{device_name}} {{interface_name}}",
+          "editorMode": "code"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "B",
+          "expr": "ftd_interface_output_bytes_avg{job=~\"$job\",instance=~\"$instance\",device_name=~\"$device\",interface=~\"$interface\"}",
+          "legendFormat": "out — {{device_name}} {{interface_name}}",
+          "editorMode": "code"
+        }
+      ]
+    },
+    {
+      "id": 22,
+      "type": "timeseries",
+      "title": "Errors and drops",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 39
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 0,
+            "lineWidth": 2,
+            "showPoints": "auto"
+          },
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "Separated from throughput on purpose: on a shared axis a handful of errors is invisible next to gigabytes of traffic. Any non-zero value here on a named interface is worth investigating — usually cabling, an SFP, or a duplex mismatch.",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A",
+          "expr": "ftd_interface_input_errors_avg{job=~\"$job\",instance=~\"$instance\",device_name=~\"$device\",interface=~\"$interface\"}",
+          "legendFormat": "in errors — {{device_name}} {{interface_name}}",
+          "editorMode": "code"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "B",
+          "expr": "ftd_interface_output_errors_avg{job=~\"$job\",instance=~\"$instance\",device_name=~\"$device\",interface=~\"$interface\"}",
+          "legendFormat": "out errors — {{device_name}} {{interface_name}}",
+          "editorMode": "code"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "C",
+          "expr": "ftd_interface_drop_packets_avg{job=~\"$job\",instance=~\"$instance\",device_name=~\"$device\",interface=~\"$interface\"}",
+          "legendFormat": "drops — {{device_name}} {{interface_name}}",
+          "editorMode": "code"
+        }
+      ]
+    },
+    {
+      "id": 23,
+      "type": "timeseries",
+      "title": "Buffer overruns / underruns / L2 decode drops",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 47
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 0,
+            "lineWidth": 2,
+            "showPoints": "auto"
+          },
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "Low-level indicators in their own panel because they usually point at a physical or driver-level problem rather than a policy one — a different investigation from an interface error count.",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A",
+          "expr": "ftd_interface_buffer_overruns_avg{job=~\"$job\",instance=~\"$instance\",device_name=~\"$device\",interface=~\"$interface\"}",
+          "legendFormat": "overruns — {{device_name}} {{interface_name}}",
+          "editorMode": "code"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "B",
+          "expr": "ftd_interface_buffer_underruns_avg{job=~\"$job\",instance=~\"$instance\",device_name=~\"$device\",interface=~\"$interface\"}",
+          "legendFormat": "underruns — {{device_name}} {{interface_name}}",
+          "editorMode": "code"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "C",
+          "expr": "ftd_interface_l2_decode_drops_avg{job=~\"$job\",instance=~\"$instance\",device_name=~\"$device\",interface=~\"$interface\"}",
+          "legendFormat": "l2 decode drops — {{device_name}} {{interface_name}}",
+          "editorMode": "code"
+        }
+      ]
+    },
+    {
+      "id": 24,
+      "type": "state-timeline",
+      "title": "Link and operational state history",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 12,
+        "y": 47
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 90,
+            "lineWidth": 0
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "down",
+                  "color": "red",
+                  "index": 0
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "1": {
+                  "text": "up",
+                  "color": "green",
+                  "index": 1
+                }
+              }
+            }
+          ],
+          "noValue": "No link/operational state — an unrecognized upstream status value is omitted rather than guessed (DESIGN.md §4.4)."
+        },
+        "overrides": []
+      },
+      "options": {
+        "mergeValues": true,
+        "showValue": "never",
+        "alignValue": "left",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "description": "Flap history at a glance, which a gauge cannot show. Both link status and operational status are plotted: they can legitimately disagree (a cable is up while the interface is administratively down).",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A",
+          "expr": "ftd_interface_link_up{job=~\"$job\",instance=~\"$instance\",device_name=~\"$device\",interface=~\"$interface\"}",
+          "legendFormat": "link — {{device_name}} {{interface_name}}",
+          "instant": false,
+          "range": true,
+          "editorMode": "code"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "B",
+          "expr": "ftd_interface_operational_up{job=~\"$job\",instance=~\"$instance\",device_name=~\"$device\",interface=~\"$interface\"}",
+          "legendFormat": "oper — {{device_name}} {{interface_name}}",
+          "instant": false,
+          "range": true,
+          "editorMode": "code"
+        }
+      ]
+    },
+    {
+      "id": 25,
+      "type": "table",
+      "title": "Interface inventory (including down and unused)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 54
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "filterable": true
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "down",
+                  "color": "red",
+                  "index": 0
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "1": {
+                  "text": "up",
+                  "color": "green",
+                  "index": 1
+                }
+              }
+            }
+          ]
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "(Operational|Link)"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "fields": ""
+        }
+      },
+      "description": "Every interface the device reports, including unused ones — exported by design (DESIGN.md §4.2). An interface whose `interface_name` equals its `interface` has no configured name; those are the ones deliberately excluded from FtdInterfaceDown alerting, and the reason this table exists separately from the down-count stat in row 1.",
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "device_uid": true,
+              "__name__": true
+            },
+            "renameByName": {
+              "device_name": "Device",
+              "interface": "Interface (hardware id)",
+              "interface_name": "Configured name",
+              "interface_type": "Type",
+              "Value #A": "Operational",
+              "Value #B": "Link"
+            }
+          }
+        }
+      ],
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A",
+          "expr": "ftd_interface_operational_up{job=~\"$job\",instance=~\"$instance\",device_name=~\"$device\",interface=~\"$interface\"}",
+          "legendFormat": "oper",
+          "instant": true,
+          "range": false,
+          "editorMode": "code"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "B",
+          "expr": "ftd_interface_link_up{job=~\"$job\",instance=~\"$instance\",device_name=~\"$device\",interface=~\"$interface\"}",
+          "legendFormat": "link",
+          "instant": true,
+          "range": false,
+          "editorMode": "code"
+        }
+      ]
+    },
+    {
+      "id": 26,
+      "type": "row",
+      "title": "High availability (conditional — empty unless devices are in an HA pair)",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 63
+      },
+      "panels": []
+    },
+    {
+      "id": 27,
+      "type": "state-timeline",
+      "title": "HA status history",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 16,
+        "x": 0,
+        "y": 64
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 90,
+            "lineWidth": 0
+          },
+          "noValue": "No HA data — expected unless these devices are in an HA pair (not a fault).",
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "1": {
+                  "text": "active",
+                  "color": "text",
+                  "index": 0
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "mergeValues": true,
+        "showValue": "never",
+        "alignValue": "left",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "description": "Empty for devices not in an HA pair, which is EXPECTED and not a fault (DESIGN.md §4.8 — conditional groups are genuinely absent, never zero). The query filters the state set to whichever status is currently 1, so the timeline shows the status name rather than five parallel 0/1 lines.\n\n**Experimental in v1.** The upstream field mapping behind this panel is validated against synthetic data only (DESIGN.md §13/§14.1) — treat unexpected values as a possible mapping bug and please report them with a `--dump-raw` capture.",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A",
+          "expr": "ftd_ha_node_status{job=~\"$job\",instance=~\"$instance\",device_name=~\"$device\"} == 1",
+          "legendFormat": "{{device_name}} — {{status}}",
+          "instant": false,
+          "range": true,
+          "editorMode": "code"
+        }
+      ]
+    },
+    {
+      "id": 28,
+      "type": "table",
+      "title": "Current HA role",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 16,
+        "y": 64
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "filterable": true
+          },
+          "noValue": "No HA data — expected unless these devices are in an HA pair (not a fault)."
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "fields": ""
+        }
+      },
+      "description": "Role (primary/secondary) per device from `ftd_ha_node_info`, alongside the currently-active status. An unrecognized upstream role renders as `unknown` rather than minting a new label value (DESIGN.md §4.4).\n\n**Experimental in v1.** The upstream field mapping behind this panel is validated against synthetic data only (DESIGN.md §13/§14.1) — treat unexpected values as a possible mapping bug and please report them with a `--dump-raw` capture.",
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "device_uid": true,
+              "__name__": true,
+              "Value #A": true,
+              "Value #B": true
+            },
+            "renameByName": {
+              "device_name": "Device",
+              "node_type": "HA role",
+              "status": "HA status"
+            }
+          }
+        }
+      ],
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A",
+          "expr": "ftd_ha_node_info{job=~\"$job\",instance=~\"$instance\",device_name=~\"$device\"} == 1",
+          "legendFormat": "role",
+          "instant": true,
+          "range": false,
+          "editorMode": "code"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "B",
+          "expr": "ftd_ha_node_status{job=~\"$job\",instance=~\"$instance\",device_name=~\"$device\"} == 1",
+          "legendFormat": "status",
+          "instant": true,
+          "range": false,
+          "editorMode": "code"
+        }
+      ]
+    },
+    {
+      "id": 29,
+      "type": "row",
+      "title": "VPN (conditional — empty unless RA VPN or S2S VPN is configured)",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 71
+      },
+      "panels": []
+    },
+    {
+      "id": 30,
+      "type": "timeseries",
+      "title": "RA VPN sessions",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 16,
+        "x": 0,
+        "y": 72
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 10,
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "short",
+          "min": 0,
+          "noValue": "No VPN data — expected unless RA VPN or site-to-site VPN is configured (not a fault)."
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^peak concurrent — .*"
+            },
+            "properties": [
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash",
+                  "dash": [
+                    10,
+                    10
+                  ]
+                }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "Active and inactive session counts with peak-concurrent overlaid as a dashed line. Empty unless remote-access VPN is configured, which is expected rather than a fault.\n\n**Experimental in v1.** The upstream field mapping behind this panel is validated against synthetic data only (DESIGN.md §13/§14.1) — treat unexpected values as a possible mapping bug and please report them with a `--dump-raw` capture.",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A",
+          "expr": "ftd_ravpn_sessions_active_avg{job=~\"$job\",instance=~\"$instance\",device_name=~\"$device\"}",
+          "legendFormat": "active — {{device_name}}",
+          "editorMode": "code"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "B",
+          "expr": "ftd_ravpn_sessions_inactive_avg{job=~\"$job\",instance=~\"$instance\",device_name=~\"$device\"}",
+          "legendFormat": "inactive — {{device_name}}",
+          "editorMode": "code"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "C",
+          "expr": "ftd_ravpn_sessions_peak_concurrent{job=~\"$job\",instance=~\"$instance\",device_name=~\"$device\"}",
+          "legendFormat": "peak concurrent — {{device_name}}",
+          "editorMode": "code"
+        }
+      ]
+    },
+    {
+      "id": 31,
+      "type": "stat",
+      "title": "Active RA VPN sessions",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 16,
+        "y": 72
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "unit": "short",
+          "noValue": "No VPN data — expected unless RA VPN or site-to-site VPN is configured (not a fault)."
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "none",
+        "graphMode": "area",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "description": "Current active session count per device. NO THRESHOLD IS SET BY DEFAULT: session capacity is model-dependent (DESIGN.md §10.2 row 6), so a shipped number would be wrong for most fleets. Set one against your own platform's documented capacity.\n\n**Experimental in v1.** The upstream field mapping behind this panel is validated against synthetic data only (DESIGN.md §13/§14.1) — treat unexpected values as a possible mapping bug and please report them with a `--dump-raw` capture.",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A",
+          "expr": "ftd_ravpn_sessions_active_avg{job=~\"$job\",instance=~\"$instance\",device_name=~\"$device\"}",
+          "legendFormat": "{{device_name}}",
+          "instant": true,
+          "range": false,
+          "editorMode": "code"
+        }
+      ]
+    },
+    {
+      "id": 32,
+      "type": "table",
+      "title": "S2S tunnels not up",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 16,
+        "x": 0,
+        "y": 79
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "filterable": true
+          },
+          "noValue": "No tunnels in a non-up state (or no S2S VPN configured) — this is the good case."
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "State"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "down": {
+                        "color": "red",
+                        "index": 0
+                      },
+                      "unknown": {
+                        "color": "orange",
+                        "index": 1
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "fields": ""
+        }
+      },
+      "description": "Filtered to non-up by default so the panel shows PROBLEMS rather than a wall of green (DESIGN.md §10.2). An empty table here is the good outcome — it means every tunnel is up, or no S2S VPN is configured. Remove the `state!=\"up\"` filter to see all tunnels.\n\n**Experimental in v1.** The upstream field mapping behind this panel is validated against synthetic data only (DESIGN.md §13/§14.1) — treat unexpected values as a possible mapping bug and please report them with a `--dump-raw` capture.",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "device_uid": true,
+              "__name__": true,
+              "Value": true
+            },
+            "renameByName": {
+              "device_name": "Device",
+              "tunnel_name": "Tunnel",
+              "tunnel_id": "Tunnel id",
+              "state": "State"
+            }
+          }
+        }
+      ],
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A",
+          "expr": "ftd_s2s_tunnel_state{job=~\"$job\",instance=~\"$instance\",device_name=~\"$device\",state!=\"up\"} == 1",
+          "legendFormat": "tunnel",
+          "instant": true,
+          "range": false,
+          "editorMode": "code"
+        }
+      ]
+    },
+    {
+      "id": 33,
+      "type": "stat",
+      "title": "Tunnels currently down",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 16,
+        "y": 79
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "unit": "short",
+          "noValue": "No VPN data — expected unless RA VPN or site-to-site VPN is configured (not a fault).",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "description": "The number an operator actually wants at 3am (DESIGN.md §10.2).\n\n**Experimental in v1.** The upstream field mapping behind this panel is validated against synthetic data only (DESIGN.md §13/§14.1) — treat unexpected values as a possible mapping bug and please report them with a `--dump-raw` capture.",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A",
+          "expr": "count(ftd_s2s_tunnel_state{job=~\"$job\",instance=~\"$instance\",device_name=~\"$device\",state=\"down\"} == 1)",
+          "legendFormat": "down",
+          "instant": true,
+          "range": false,
+          "editorMode": "code"
+        }
+      ]
+    },
+    {
+      "id": 34,
+      "type": "row",
+      "title": "Chassis (conditional — chassis-based platforms only, empty on appliances)",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 86
+      },
+      "panels": []
+    },
+    {
+      "id": 35,
+      "type": "timeseries",
+      "title": "Fan speed",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 87
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 0,
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "rotrpm",
+          "min": 0,
+          "noValue": "No chassis data — expected on appliances such as the FTD 1010 (not a fault). Chassis-based platforms only."
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "min",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "Fan RPM by `fan` label. Empty on appliances such as the FTD 1010, which is expected rather than a fault (DESIGN.md §10.2 row 7).\n\n**Experimental in v1.** The upstream field mapping behind this panel is validated against synthetic data only (DESIGN.md §13/§14.1) — treat unexpected values as a possible mapping bug and please report them with a `--dump-raw` capture.",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A",
+          "expr": "ftd_chassis_fan_rpm{job=~\"$job\",instance=~\"$instance\",device_name=~\"$device\"}",
+          "legendFormat": "{{device_name}} — fan {{fan}}",
+          "instant": false,
+          "range": true,
+          "editorMode": "code"
+        }
+      ]
+    },
+    {
+      "id": 36,
+      "type": "stat",
+      "title": "PSU status",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 12,
+        "y": 87
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "noValue": "No chassis data — expected on appliances such as the FTD 1010 (not a fault). Chassis-based platforms only.",
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "FAILED",
+                  "color": "red",
+                  "index": 0
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "1": {
+                  "text": "OK",
+                  "color": "green",
+                  "index": 1
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "description": "Input, output, and fan status per PSU, red on 0. A PSU whose upstream status value is unrecognized is OMITTED rather than rendered as 0 (DESIGN.md §4.4) — so a missing tile is \"not classifiable\", not \"failed\".\n\n**Experimental in v1.** The upstream field mapping behind this panel is validated against synthetic data only (DESIGN.md §13/§14.1) — treat unexpected values as a possible mapping bug and please report them with a `--dump-raw` capture.",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A",
+          "expr": "ftd_chassis_psu_input_up{job=~\"$job\",instance=~\"$instance\",device_name=~\"$device\"}",
+          "legendFormat": "{{device_name}} psu {{psu}} input",
+          "instant": true,
+          "range": false,
+          "editorMode": "code"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "B",
+          "expr": "ftd_chassis_psu_output_up{job=~\"$job\",instance=~\"$instance\",device_name=~\"$device\"}",
+          "legendFormat": "{{device_name}} psu {{psu}} output",
+          "instant": true,
+          "range": false,
+          "editorMode": "code"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "C",
+          "expr": "ftd_chassis_psu_fan_up{job=~\"$job\",instance=~\"$instance\",device_name=~\"$device\"}",
+          "legendFormat": "{{device_name}} psu {{psu}} fan",
+          "instant": true,
+          "range": false,
+          "editorMode": "code"
+        }
+      ]
+    },
+    {
+      "id": 37,
+      "type": "row",
+      "title": "Data freshness and exporter diagnostics",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 94
+      },
+      "panels": []
+    },
+    {
+      "id": 38,
+      "type": "timeseries",
+      "title": "Per-device data staleness",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 95
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 0,
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "s",
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 600
+              },
+              {
+                "color": "red",
+                "value": 900
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "Age of each device's health sample window. This catches \"this ONE device stopped reporting\" while every other device — and `ftd_exporter_up` — still looks fine, because a partial-failure poll cycle still counts as a success (DESIGN.md §3.3). This panel is the reason the window timestamps are exported at all (§4.5). A device missing from this panel entirely is reporting no window timestamps rather than reporting stale ones.",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A",
+          "expr": "time() - ftd_health_window_end_timestamp_seconds{job=~\"$job\",instance=~\"$instance\",device_name=~\"$device\"}",
+          "legendFormat": "{{device_name}}",
+          "instant": false,
+          "range": true,
+          "editorMode": "code"
+        }
+      ]
+    },
+    {
+      "id": 39,
+      "type": "timeseries",
+      "title": "Poll duration",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 95
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 0,
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "s",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "p50/p95/p99 of poll cycle latency. Reveals a degrading upstream before it fails outright. On the FMC backend this scales with device count — a cycle is one request per device per metric family (DESIGN.md §3.3).",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A",
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(ftd_exporter_poll_duration_seconds_bucket{job=~\"$job\",instance=~\"$instance\"}[5m])))",
+          "legendFormat": "p50",
+          "editorMode": "code"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "B",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(ftd_exporter_poll_duration_seconds_bucket{job=~\"$job\",instance=~\"$instance\"}[5m])))",
+          "legendFormat": "p95",
+          "editorMode": "code"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "C",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(ftd_exporter_poll_duration_seconds_bucket{job=~\"$job\",instance=~\"$instance\"}[5m])))",
+          "legendFormat": "p99",
+          "editorMode": "code"
+        }
+      ]
+    },
+    {
+      "id": 40,
+      "type": "timeseries",
+      "title": "Poll errors by reason",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 0,
+        "y": 103
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 20,
+            "lineWidth": 1,
+            "showPoints": "auto",
+            "stacking": {
+              "mode": "normal"
+            }
+          },
+          "unit": "reqps",
+          "min": 0,
+          "noValue": "0 — no poll errors in this window."
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "sum"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "The `reason` label set is bounded and deliberate (DESIGN.md §11): auth, rate_limited, timeout, network, http_5xx, parse, unknown. A rising `rate_limited` means the poll interval is too aggressive for the backend; a rising `parse` means upstream schema drift.",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A",
+          "expr": "sum by (reason) (rate(ftd_exporter_poll_errors_total{job=~\"$job\",instance=~\"$instance\"}[5m]))",
+          "legendFormat": "{{reason}}",
+          "editorMode": "code"
+        }
+      ]
+    },
+    {
+      "id": 41,
+      "type": "timeseries",
+      "title": "Upstream request rate by status code",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 8,
+        "y": 103
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 20,
+            "lineWidth": 1,
+            "showPoints": "auto",
+            "stacking": {
+              "mode": "normal"
+            }
+          },
+          "unit": "reqps",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "sum"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "Requests per second to the Cisco API, by templated endpoint and status code (never with UUIDs interpolated — that would be a cardinality explosion, DESIGN.md §11). A sustained 429 rate means the internal limiter is not keeping up with the configured poll interval.",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A",
+          "expr": "sum by (status_code) (rate(ftd_exporter_upstream_requests_total{job=~\"$job\",instance=~\"$instance\"}[5m]))",
+          "legendFormat": "{{status_code}}",
+          "editorMode": "code"
+        }
+      ]
+    },
+    {
+      "id": 42,
+      "type": "stat",
+      "title": "Exporter diagnostics",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 16,
+        "y": 103
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "unit": "short",
+          "noValue": "—"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "TLS verification disabled"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "0": {
+                        "text": "no",
+                        "color": "green",
+                        "index": 0
+                      }
+                    }
+                  },
+                  {
+                    "type": "value",
+                    "options": {
+                      "1": {
+                        "text": "YES — INSECURE",
+                        "color": "red",
+                        "index": 1
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "red",
+                      "value": 1
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "(Parse errors|Unknown enum).*"
+            },
+            "properties": [
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 1
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "description": "TLS verification disabled is a RED indicator by design (DESIGN.md §9.6) — the insecure escape hatch is a bring-up aid, not a running configuration. \"Discovered vs reporting\" is the FMC per-device-failure/pagination diagnostic: a gap between them means discovery found devices the poll could not fetch. Rate-limit deferrals confirm the internal limiter is doing its job; a large number is not an error but does mean the configuration is more aggressive than the backend allows.",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A",
+          "expr": "max(ftd_exporter_tls_verification_disabled{job=~\"$job\",instance=~\"$instance\"})",
+          "legendFormat": "TLS verification disabled",
+          "instant": true,
+          "range": false,
+          "editorMode": "code"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "B",
+          "expr": "sum(ftd_exporter_devices_discovered{job=~\"$job\",instance=~\"$instance\"})",
+          "legendFormat": "Devices discovered",
+          "instant": true,
+          "range": false,
+          "editorMode": "code"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "C",
+          "expr": "sum(ftd_exporter_series{job=~\"$job\",instance=~\"$instance\"})",
+          "legendFormat": "Series rendered",
+          "instant": true,
+          "range": false,
+          "editorMode": "code"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "D",
+          "expr": "sum(increase(ftd_exporter_rate_limit_deferrals_total{job=~\"$job\",instance=~\"$instance\"}[1h]))",
+          "legendFormat": "Rate-limit deferrals (1h)",
+          "instant": true,
+          "range": false,
+          "editorMode": "code"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "E",
+          "expr": "sum(increase(ftd_exporter_parse_errors_total{job=~\"$job\",instance=~\"$instance\"}[1h]))",
+          "legendFormat": "Parse errors (1h)",
+          "instant": true,
+          "range": false,
+          "editorMode": "code"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "F",
+          "expr": "sum(increase(ftd_exporter_unknown_enum_total{job=~\"$job\",instance=~\"$instance\"}[1h]))",
+          "legendFormat": "Unknown enum values (1h)",
+          "instant": true,
+          "range": false,
+          "editorMode": "code"
+        }
+      ]
+    },
+    {
+      "id": 43,
+      "type": "table",
+      "title": "Exporter build info",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 24,
+        "x": 0,
+        "y": 110
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "filterable": true
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "fields": ""
+        }
+      },
+      "description": "What is actually running — the first thing to establish in a support case. Include these labels in any issue you open.",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "Value": true
+            },
+            "renameByName": {
+              "version": "Version",
+              "commit": "Commit",
+              "node_version": "Node",
+              "backend": "Backend",
+              "instance": "Instance",
+              "job": "Job"
+            }
+          }
+        }
+      ],
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A",
+          "expr": "ftd_exporter_build_info{job=~\"$job\",instance=~\"$instance\"}",
+          "legendFormat": "build",
+          "instant": true,
+          "range": false,
+          "editorMode": "code"
+        }
+      ]
+    }
+  ]
+}

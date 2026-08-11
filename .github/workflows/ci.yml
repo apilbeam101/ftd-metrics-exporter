@@ -197,6 +197,39 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  # Alert-rule validation (Stage 15 testing steps 7 and 9). `check rules`
+  # catches a syntax error or an unparseable expression; `test rules` runs the
+  # committed both-directions unit tests, which is the leg that catches a rule
+  # that parses fine but can never fire (a 0-100 threshold against a 0-1 ratio,
+  # a missing `> 0` guard, a label matcher that excludes everything). The
+  # dashboard's own PromQL is covered separately by test/unit/dashboard-and-
+  # alerts.test.ts in the `fast` job.
+  #
+  # promtool is fetched from the official release rather than an action, pinned
+  # by version AND verified against the published sha256 -- the same
+  # supply-chain posture as the SHA-pinned actions above. Bump both together;
+  # the checksum is from
+  # github.com/prometheus/prometheus/releases/download/v3.13.2/sha256sums.txt.
+  alerts:
+    name: promtool (alert rules)
+    runs-on: ubuntu-latest
+    env:
+      PROM_VERSION: 3.13.2
+      PROM_SHA256: 0e8c4d46101bd025ea8265e377d2caabc57f488fc1be1c367f37db69ea41be6f
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install promtool
+        run: |
+          tarball="prometheus-${PROM_VERSION}.linux-amd64.tar.gz"
+          curl -sSfL -o "$tarball" \
+            "https://github.com/prometheus/prometheus/releases/download/v${PROM_VERSION}/${tarball}"
+          echo "${PROM_SHA256}  ${tarball}" | sha256sum --check --strict
+          tar -xzf "$tarball" --strip-components=1 \
+            "prometheus-${PROM_VERSION}.linux-amd64/promtool"
+          ./promtool --version
+      - run: ./promtool check rules alerts/ftd-health.yaml
+      - run: ./promtool test rules alerts/ftd-health.test.yaml
+
   # Fixture-sanitization guard (Stage 1) -- re-run here so a future fixture
   # addition can't reintroduce a real UUID/IPv4 without CI catching it.
   fixtures:

@@ -1,0 +1,383 @@
+# Prometheus alerting rules for ftd-metrics-exporter (DESIGN.md §10.3).
+#
+# Load with:
+#   rule_files:
+#     - /etc/prometheus/rules/ftd-health.yaml
+#
+# Validate with `promtool check rules alerts/ftd-health.yaml`, and run the
+# committed unit tests with `promtool test rules alerts/ftd-health.test.yaml`.
+# Both run in CI (.github/workflows/ci.yml, job `alerts`), so this file is
+# self-verifying rather than eyeballed.
+#
+# THRESHOLDS ARE STARTING POINTS, NOT UNIVERSAL TRUTHS. 85% CPU, 90% memory,
+# and 90% disk are the defaults DESIGN.md §10.3 proposes; a device that
+# legitimately runs hot under normal load will need its own threshold. Adjust
+# per fleet rather than treating a firing alert as proof of a problem.
+#
+# Every `ftd_*` metric name referenced here is cross-checked against the
+# exporter's actual metric declarations by
+# test/unit/dashboard-and-alerts.test.ts, so a rename in src/metrics/ cannot
+# silently leave a rule querying a series that no longer exists.
+
+groups:
+  # ---------------------------------------------------------------------------
+  # Exporter health. First, deliberately: DESIGN.md §10.2 is emphatic that a
+  # dashboard (or alert set) that looks green while the exporter is dead is the
+  # worst possible outcome. If the exporter is down, every device-level rule
+  # below goes quiet too -- not because the fleet is healthy, but because
+  # nothing is reporting. These two rules are what distinguish those cases.
+  # ---------------------------------------------------------------------------
+  - name: ftd-exporter-health
+    rules:
+      - alert: FtdExporterDown
+        # `ftd_exporter_up` means "the last poll *cycle* succeeded", not "the
+        # last scrape of this target succeeded" (DESIGN.md §11's semantic
+        # note). A `for: 5m` rides out a single transient upstream failure,
+        # which the exporter's own escalating backoff is already designed to
+        # recover from on its own.
+        expr: ftd_exporter_up == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: FTD exporter poll cycles are failing ({{ $labels.instance }})
+          description: >-
+            ftd_exporter_up has been 0 for over 5 minutes on {{ $labels.instance }}.
+            The exporter is still serving its last cached snapshot, so device
+            panels may still look populated -- check ftd_exporter_cache_age_seconds
+            for how stale that data actually is, and
+            ftd_exporter_poll_errors_total by reason for why the cycle is failing.
+
+      - alert: FtdExporterAbsent
+        # THE GAP EVERY OTHER RULE IN THIS FILE HAS: every rule here queries an
+        # `ftd_*` series, and if the exporter *process* dies (crash, OOM, pod
+        # eviction, unit stopped) those series simply stop existing. An
+        # instant-vector comparison against a series that does not exist matches
+        # nothing, so `ftd_exporter_up == 0` is silent -- not because the
+        # exporter is healthy, but because there is nothing left to evaluate.
+        # Verified against a real Prometheus: with the exporter killed, every
+        # rule in this file went `inactive` and the alerts API returned nothing
+        # at all, while Prometheus's own `up` was 0 the whole time. That is
+        # precisely the "dashboard looks green while the exporter is dead"
+        # failure DESIGN.md §10.2 calls the worst possible outcome, arriving
+        # through the alert set instead of the dashboard.
+        #
+        # This rule is therefore built on `up` (Prometheus's own scrape-health
+        # metric, which exists whether or not the target answers) rather than
+        # any `ftd_*` series. It is the only rule here that can fire when the
+        # exporter is gone, which makes it the one that must never be deleted as
+        # "redundant with FtdExporterDown" -- the two cover disjoint cases:
+        # FtdExporterDown means "running but its polls fail", this means "not
+        # answering at all".
+        #
+        # `job="ftd-metrics"` MUST match the job name in your own scrape config;
+        # unlike every other rule in this file it cannot be job-agnostic, since
+        # a bare `up == 0` would fire for every unrelated down target in the
+        # cluster.
+        expr: up{job="ftd-metrics"} == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: FTD exporter is not answering scrapes ({{ $labels.instance }})
+          description: >-
+            Prometheus has been unable to scrape {{ $labels.instance }} for over
+            5 minutes. No FTD metrics are being collected at all, and every other
+            alert in this rule set is silent for the same reason -- their series
+            no longer exist. Check the process/pod/unit, then /healthz.
+
+      - alert: FtdExporterStale
+        # The `> 0` guard is load-bearing and not cosmetic. This gauge
+        # initializes to 0 and only takes a real value after the first
+        # *successful* poll (src/poller/poller.ts), so a bare
+        # `time() - <gauge> > 300` evaluates to time() itself -- roughly 1.8
+        # billion -- and fires within one evaluation interval of every single
+        # exporter start, before a first poll could possibly have completed.
+        # Verified against a freshly constructed registry. FtdExporterDown is
+        # the rule that covers "never succeeded at all"; this one covers
+        # "succeeded once, then stopped".
+        #
+        # Operand order also matters, and not only for readability: `and`
+        # returns the *left-hand* side's sample value, so writing the `> 0`
+        # guard first made {{ $value }} the raw unix timestamp rather than the
+        # staleness gap -- the annotation then reported "was 1m 0s ago" for a
+        # poll that was actually 11 minutes stale. Caught by promtool
+        # comparing the rendered annotation, not by reading the expression.
+        expr: |
+          time() - ftd_exporter_last_successful_poll_timestamp_seconds > 300
+            and
+          ftd_exporter_last_successful_poll_timestamp_seconds > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: FTD exporter has not completed a successful poll in over 5 minutes
+          description: >-
+            The last successful poll on {{ $labels.instance }} was
+            {{ $value | humanizeDuration }} ago. Served metrics are stale by at
+            least that much regardless of what the device panels show.
+
+      - alert: FtdExporterInsecureTls
+        # Security-visible by design (DESIGN.md §9.6): the insecure escape
+        # hatch is meant to be a temporary bring-up aid, not a running
+        # configuration. No `for` -- if this is set, it was set at startup and
+        # will not clear on its own.
+        expr: ftd_exporter_tls_verification_disabled == 1
+        labels:
+          severity: warning
+        annotations:
+          summary: FTD exporter is running with upstream TLS verification disabled
+          description: >-
+            {{ $labels.instance }} has FMC_TLS_INSECURE_SKIP_VERIFY=true. Upstream
+            responses are not authenticated and the FMC credential is exposed to
+            an active on-path attacker. Replace with a CA bundle
+            (FMC_CA_BUNDLE_PATH) and a hostname-matching FMC_HOST.
+
+  # ---------------------------------------------------------------------------
+  # Per-device data freshness. Distinct from exporter staleness above: this
+  # catches "one device stopped reporting while everything else is fine", which
+  # is invisible in ftd_exporter_up (a partial-failure cycle still counts as a
+  # success -- DESIGN.md §3.3's partial-success design).
+  # ---------------------------------------------------------------------------
+  - name: ftd-device-freshness
+    rules:
+      - alert: FtdDeviceMetricsStale
+        # No `> 0` guard needed here, unlike FtdExporterStale: the window
+        # timestamps are optional at the domain level and are simply *not
+        # rendered* when absent (src/metrics/collector.ts), rather than
+        # rendered as 0. An absent series produces no result, not a false
+        # positive.
+        expr: time() - ftd_health_window_end_timestamp_seconds > 900
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: FTD device {{ $labels.device_name }} is reporting stale health data
+          description: >-
+            The health sample window for {{ $labels.device_name }} ended
+            {{ $value | humanizeDuration }} ago. If other devices are current,
+            this is a per-device problem (device offline, or its health policy
+            stopped collecting) rather than an exporter problem.
+
+  # ---------------------------------------------------------------------------
+  # Resource pressure. Ratios are 0-1 (DESIGN.md §14.13), not 0-100 -- a
+  # threshold written as `> 85` would never fire.
+  # ---------------------------------------------------------------------------
+  - name: ftd-resource-pressure
+    rules:
+      - alert: FtdHighCpu
+        # component="system" only. Lina and Snort are reported separately and a
+        # sustained high Snort figure is often normal under inspection load;
+        # alerting on all three components would make this rule noisy for a
+        # reason that is not a fault. The dashboard splits the components so an
+        # operator can see *which* one is driving a system-level alert.
+        expr: ftd_cpu_usage_ratio{component="system"} > 0.85
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: FTD {{ $labels.device_name }} system CPU above 85% for 15m
+          description: >-
+            System CPU on {{ $labels.device_name }} has averaged
+            {{ $value | humanizePercentage }} for 15 minutes. Check the Lina and
+            Snort breakdown on the dashboard -- they imply different responses.
+
+      - alert: FtdHighMemory
+        expr: ftd_memory_usage_ratio{component="system"} > 0.90
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: FTD {{ $labels.device_name }} system memory above 90% for 15m
+          description: >-
+            System memory on {{ $labels.device_name }} has averaged
+            {{ $value | humanizePercentage }} for 15 minutes.
+
+      - alert: FtdDiskNearFull
+        # `for: 5m` rather than DESIGN.md §10.3's bare expression: disk usage
+        # is an averaged figure over the sample window and does not spike
+        # instantaneously, but a single scrape landing on a transient value
+        # should not page. Critical because a full disk on FTD affects logging
+        # and deployment, not just metrics.
+        expr: ftd_disk_usage_ratio > 0.90
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: FTD {{ $labels.device_name }} disk above 90% full
+          description: >-
+            Disk usage on {{ $labels.device_name }} is
+            {{ $value | humanizePercentage }}.
+
+  # ---------------------------------------------------------------------------
+  # Interfaces.
+  #
+  # DECISION (IMPLEMENTATION_PLAN.md Stage 15's named design tension, resolved
+  # here): the exporter exports *every* interface including unused ones
+  # (DESIGN.md §4.2), and an unused interface is legitimately down, so alerting
+  # on all of them generates constant noise. DESIGN.md §10.3 says to default to
+  # interfaces with a real `interface_name`. But §4.3's fallback sets
+  # `interface_name` to the hardware id when no name is configured, so "has a
+  # real name" is NOT expressible as `interface_name != ""` -- the plan flagged
+  # this and asked for an explicit resolution.
+  #
+  # The plan listed three options (a curated allowlist, "ever been up", or a
+  # new distinguishing label). All three were rejected in favour of a fourth
+  # that needs no config, no recording rule, and no metric-surface change:
+  #
+  #   ftd_interface_operational_up == 0
+  #     unless on(job, instance, device_uid, interface)
+  #       label_replace(
+  #         max by (job, instance, device_uid, interface_name) (ftd_interface_operational_up),
+  #         "interface", "$1", "interface_name", "(.*)")
+  #
+  # label_replace copies interface_name over interface, so for an *unnamed*
+  # interface the rewritten series has an identical (device_uid, interface)
+  # pair to the original and `unless` removes it; for a *named* interface the
+  # rewritten pair differs and the original survives. This expresses the
+  # otherwise-inexpressible label-to-label comparison entirely in PromQL.
+  # Verified with promtool against all three cases (named+down fires,
+  # unnamed+down does not, named+up does not) -- see
+  # alerts/ftd-health.test.yaml.
+  #
+  # The two non-obvious pieces of that expression, both added after a review
+  # found the naive form silently broken, and both regression-tested:
+  #
+  # `max by (...)` on the RHS is load-bearing, not a stylistic reduction.
+  # label_replace overwrites `interface`, so two interfaces on one device that
+  # share an `interface_name` -- a named interface colliding with a sibling's
+  # hardware id is enough -- collapse to an identical labelset, and PromQL then
+  # aborts the *entire rule evaluation* with "vector cannot contain metrics with
+  # the same labelset". That silences this rule for every device in the fleet,
+  # not just the colliding pair, and the colliding interfaces do not even have
+  # to be down for it to happen. `max by` folds the duplicates before
+  # label_replace can mint them.
+  #
+  # `job, instance` in the `unless on(...)` list keeps the suppression
+  # per-exporter. Without them, two exporters scraping the same device (an
+  # HA/rollout overlap, or an FMC and SCC exporter covering one fleet) match
+  # across instances: exporter B reporting the §4.3 fallback name suppresses
+  # exporter A's genuine named-interface alert entirely.
+  #
+  # Rejected alternatives, for the record: an allowlist needs per-fleet
+  # maintenance and silently misses new interfaces; "ever been up" needs a
+  # recording rule plus long-range lookback and misfires on an interface that
+  # was named but never yet brought up; a new label is a metric-surface change
+  # (DESIGN.md §13) for something PromQL can already express.
+  # ---------------------------------------------------------------------------
+  - name: ftd-interfaces
+    rules:
+      - alert: FtdInterfaceDown
+        expr: |
+          ftd_interface_operational_up == 0
+            unless on(job, instance, device_uid, interface)
+              label_replace(
+                max by (job, instance, device_uid, interface_name) (ftd_interface_operational_up),
+                "interface", "$1", "interface_name", "(.*)"
+              )
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: >-
+            FTD interface {{ $labels.interface_name }} down on
+            {{ $labels.device_name }}
+          description: >-
+            Named interface {{ $labels.interface_name }} ({{ $labels.interface }})
+            on {{ $labels.device_name }} has been operationally down for 5
+            minutes. Unnamed/unused interfaces are excluded from this rule by
+            design -- see the comment above it.
+
+      - alert: FtdInterfaceErrors
+        # Same named-interface filter as above, same rationale: an error
+        # counter on an unconfigured interface is not actionable. `_avg`
+        # metrics are gauges of an upstream-averaged value, not counters, so
+        # this is a level check rather than a rate().
+        expr: |
+          ftd_interface_input_errors_avg > 0
+            unless on(job, instance, device_uid, interface)
+              label_replace(
+                max by (job, instance, device_uid, interface_name) (ftd_interface_input_errors_avg),
+                "interface", "$1", "interface_name", "(.*)"
+              )
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: >-
+            FTD interface {{ $labels.interface_name }} reporting input errors on
+            {{ $labels.device_name }}
+          description: >-
+            {{ $labels.interface_name }} ({{ $labels.interface }}) on
+            {{ $labels.device_name }} has averaged {{ $value }} input errors over
+            the sample window, sustained for 15 minutes. Usually physical: cable,
+            SFP, or duplex mismatch.
+
+  # ---------------------------------------------------------------------------
+  # Conditional groups. These rules produce no results at all on a fleet that
+  # has no HA pair / no VPN / no chassis hardware, because the underlying series
+  # are genuinely absent rather than zero (DESIGN.md §4.8). That is the intended
+  # behavior -- an always-silent rule here means "not applicable to this fleet",
+  # not "misconfigured".
+  #
+  # EXPERIMENTAL in v1 on both backends (DESIGN.md §13): the chassis, HA, and
+  # VPN field mappings are validated against synthetic data only, so these three
+  # rules may need adjusting once real hardware data exists.
+  # ---------------------------------------------------------------------------
+  - name: ftd-ha
+    rules:
+      - alert: FtdHaNotNormal
+        # State-set representation (DESIGN.md §4.4): every recognized status
+        # label is emitted per device with exactly one set to 1, so
+        # {status="normal"} == 0 means "in some other state" and is present
+        # only for devices that actually report HA. An unrecognized upstream
+        # value renders as status="unknown" 1 / normal 0, which correctly
+        # fires -- an HA node whose state the exporter cannot classify is not a
+        # node anyone should assume is healthy.
+        expr: ftd_ha_node_status{status="normal"} == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: FTD HA node {{ $labels.device_name }} is not in NORMAL state
+          description: >-
+            {{ $labels.device_name }} has not reported HA status NORMAL for 5
+            minutes. Query ftd_ha_node_status{device_name="{{ $labels.device_name }}"}
+            to see which state is currently 1, and ftd_ha_node_info for its role.
+
+  - name: ftd-vpn
+    rules:
+      - alert: FtdS2sTunnelDown
+        expr: ftd_s2s_tunnel_state{state="down"} == 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: >-
+            FTD S2S tunnel {{ $labels.tunnel_name }} down on
+            {{ $labels.device_name }}
+          description: >-
+            Site-to-site tunnel {{ $labels.tunnel_name }} on
+            {{ $labels.device_name }} has been down for 10 minutes.
+
+  - name: ftd-chassis
+    rules:
+      - alert: FtdChassisPsuFailure
+        # DESIGN.md §10.3 sketches this as `A == 0 or B == 0`. That is kept,
+        # but note the semantics: `or` is a set union, so a PSU with *both*
+        # input and output down yields only the left-hand side's series, and
+        # the alert's own labels do not say which of the two failed. The
+        # annotation therefore points at both metrics rather than claiming one.
+        expr: ftd_chassis_psu_input_up == 0 or ftd_chassis_psu_output_up == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: >-
+            FTD chassis PSU {{ $labels.psu }} failure on {{ $labels.device_name }}
+          description: >-
+            PSU {{ $labels.psu }} on {{ $labels.device_name }} reports input or
+            output down. Check both
+            ftd_chassis_psu_input_up{psu="{{ $labels.psu }}"} and
+            ftd_chassis_psu_output_up{psu="{{ $labels.psu }}"} -- this rule is a
+            union of the two and does not distinguish which failed.
