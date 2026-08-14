@@ -32,6 +32,8 @@ export interface SelfMetricsRecorder {
   onDiscoverySuccess(deviceCount: number): void;
   onDiscoveryFailure(): void;
   onSccInventoryError(): void;
+  onLicenseError(): void;
+  onCertificateError(): void;
 }
 
 export function createSelfMetricsRecorder(
@@ -47,6 +49,8 @@ export function createSelfMetricsRecorder(
     | 'devicesDiscovered'
     | 'discoveryErrorsTotal'
     | 'sccInventoryErrorsTotal'
+    | 'licenseErrorsTotal'
+    | 'certificateErrorsTotal'
   >,
 ): SelfMetricsRecorder {
   return {
@@ -77,6 +81,12 @@ export function createSelfMetricsRecorder(
     },
     onSccInventoryError(): void {
       metrics.sccInventoryErrorsTotal.inc();
+    },
+    onLicenseError(): void {
+      metrics.licenseErrorsTotal.inc();
+    },
+    onCertificateError(): void {
+      metrics.certificateErrorsTotal.inc();
     },
   };
 }

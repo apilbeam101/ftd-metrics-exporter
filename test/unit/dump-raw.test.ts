@@ -89,6 +89,8 @@ test('dumpRaw (SCC): writes the raw upstream JSON to the write() sink, with the 
       fmcUid: 'fmc-uid-1',
       timeRange: '5m',
       inventoryPollIntervalSeconds: 300,
+      licensePollIntervalSeconds: 3600,
+      certificatePollIntervalSeconds: 3600,
     },
   };
 
@@ -107,10 +109,15 @@ test('dumpRaw (SCC): writes the raw upstream JSON to the write() sink, with the 
   assert.ok(!written.includes(SECRET_TOKEN), 'bearer token leaked into --dump-raw output');
   assert.ok(!written.includes(realDeviceUid), 'real device UUID was not sanitized');
   const parsed = JSON.parse(written) as Array<{ backend: string; body: unknown }>;
-  // 2 entries: the health/metrics response under test, plus the adapter's
-  // own device-inventory refresh (DESIGN.md §4.6.1) — both real requests
+  // 4 entries: the health/metrics response under test, the adapter's own
+  // device-inventory refresh (DESIGN.md §4.6.1), the one-time domain-UUID
+  // resolution `init()` makes for certificate polling (DESIGN.md §4.6.2 —
+  // this test's `sccHandler` fallthrough answers it with the same array the
+  // health handler returns, which is not a plain object, so certificate
+  // polling itself never activates and issues no request of its own), and
+  // the license-status refresh (DESIGN.md §4.6.2) — all real requests
   // through the same real adapter, which is the whole point of --dump-raw.
-  assert.equal(parsed.length, 2);
+  assert.equal(parsed.length, 4);
   const health = parsed.find((entry) => Array.isArray(entry.body));
   assert.equal(health?.backend, 'scc');
 });
@@ -142,6 +149,8 @@ test('dumpRaw (SCC): the sanitized output round-trips through the Stage 2 mapper
       fmcUid: 'fmc-uid-1',
       timeRange: '5m',
       inventoryPollIntervalSeconds: 300,
+      licensePollIntervalSeconds: 3600,
+      certificatePollIntervalSeconds: 3600,
     },
   };
 
@@ -183,6 +192,8 @@ test('dumpRaw: skipSanitize leaves identifiers untouched (operator-asserted opt-
       fmcUid: 'fmc-uid-1',
       timeRange: '5m',
       inventoryPollIntervalSeconds: 300,
+      licensePollIntervalSeconds: 3600,
+      certificatePollIntervalSeconds: 3600,
     },
   };
 
@@ -235,6 +246,8 @@ test('dumpRaw (FMC): captures one entry per device/family with the access token 
       tlsInsecureSkipVerify: true,
       maxConcurrentRequests: 5,
       discoveryIntervalSeconds: 900,
+      licensePollIntervalSeconds: 3600,
+      certificatePollIntervalSeconds: 3600,
       metricFamilies: ['CPU'],
       timeRange: '5m',
     },
@@ -295,6 +308,8 @@ test('dumpRaw (FMC): the sanitized output round-trips through the Stage 2 FMC ma
       tlsInsecureSkipVerify: true,
       maxConcurrentRequests: 5,
       discoveryIntervalSeconds: 900,
+      licensePollIntervalSeconds: 3600,
+      certificatePollIntervalSeconds: 3600,
       metricFamilies: ['CPU'],
       timeRange: '5m',
     },
@@ -356,6 +371,8 @@ test('dumpRaw (SCC): a 404 error response body is captured before the client cla
       fmcUid: 'fmc-uid-1',
       timeRange: '5m',
       inventoryPollIntervalSeconds: 300,
+      licensePollIntervalSeconds: 3600,
+      certificatePollIntervalSeconds: 3600,
     },
   };
 
@@ -383,10 +400,16 @@ test('dumpRaw (SCC): a 404 error response body is captured before the client cla
   }
 
   const parsed = JSON.parse(written) as Array<{ statusCode: number; body: unknown }>;
-  assert.equal(parsed.length, 2, 'expected the 404 health capture plus the inventory capture');
-  const notFound = parsed.find((entry) => entry.statusCode === 404);
-  assert.ok(notFound, 'the 404 error response must still be captured, not dropped');
-  assert.deepEqual(notFound.body, { error: 'no such fmcUid' });
+  // 4 captures: the 404 health leg under test, the inventory refresh (200,
+  // `sccHandler` intercepts that path), the domain-UUID resolution `init()`
+  // makes for certificate polling (404, same handler fallthrough as health
+  // — the resulting body is not a usable domain list, so certificate
+  // polling never activates and issues no request of its own), and the
+  // license-status refresh (404, same fallthrough) — DESIGN.md §4.6.2.
+  assert.equal(parsed.length, 4, 'expected the 404 health capture plus inventory/domain/license');
+  const notFound = parsed.filter((entry) => entry.statusCode === 404);
+  assert.ok(notFound.length > 0, 'the 404 error response must still be captured, not dropped');
+  assert.deepEqual(notFound[0]?.body, { error: 'no such fmcUid' });
 });
 
 test('dumpRaw (FMC): a per-family 401/error response body is captured even though that family contributes no data to the snapshot', async () => {
@@ -417,6 +440,8 @@ test('dumpRaw (FMC): a per-family 401/error response body is captured even thoug
       tlsInsecureSkipVerify: true,
       maxConcurrentRequests: 5,
       discoveryIntervalSeconds: 900,
+      licensePollIntervalSeconds: 3600,
+      certificatePollIntervalSeconds: 3600,
       metricFamilies: ['CPU'],
       timeRange: '5m',
     },
@@ -464,6 +489,8 @@ test('dumpRaw: a links.self URL embedding userinfo credentials and a bearer-toke
       fmcUid: 'fmc-uid-1',
       timeRange: '5m',
       inventoryPollIntervalSeconds: 300,
+      licensePollIntervalSeconds: 3600,
+      certificatePollIntervalSeconds: 3600,
     },
   };
 
@@ -510,6 +537,8 @@ test('dumpRaw: a non-JSON (e.g. HTML SSO interstitial) response body is pattern-
       fmcUid: 'fmc-uid-1',
       timeRange: '5m',
       inventoryPollIntervalSeconds: 300,
+      licensePollIntervalSeconds: 3600,
+      certificatePollIntervalSeconds: 3600,
     },
   };
 
@@ -548,6 +577,8 @@ test('dumpRaw: skipSanitize leaves a non-JSON body untouched too (opt-out applie
       fmcUid: 'fmc-uid-1',
       timeRange: '5m',
       inventoryPollIntervalSeconds: 300,
+      licensePollIntervalSeconds: 3600,
+      certificatePollIntervalSeconds: 3600,
     },
   };
 

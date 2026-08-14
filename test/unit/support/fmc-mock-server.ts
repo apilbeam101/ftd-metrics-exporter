@@ -53,6 +53,10 @@ export interface FmcMockServer {
   force401Once(deviceId: string, family: string): void;
   /** Delays every aggregatemetrics response by this many ms — used to observe in-flight concurrency from the client side. */
   setAggregateMetricsDelay(ms: number): void;
+  /** DESIGN.md §4.6.2. Defaults to `200 {"items":[]}` when unset, matching aggregatemetrics's own "unset = empty valid" default. */
+  setLicenseResponse(body: unknown, statusCode?: number): void;
+  /** DESIGN.md §4.6.2. Defaults to `200 {"items":[]}` when unset. */
+  setCertificatesResponse(body: unknown, statusCode?: number): void;
   generateTokenCallCount: number;
   refreshTokenCallCount: number;
 }
@@ -75,6 +79,14 @@ export async function startFmcMockServer(): Promise<FmcMockServer> {
   let generateTokenCallCount = 0;
   let refreshTokenCallCount = 0;
   let aggregateMetricsDelayMs = 0;
+  let licenseResponse: { body: unknown; statusCode: number } = {
+    body: { items: [] },
+    statusCode: 200,
+  };
+  let certificatesResponse: { body: unknown; statusCode: number } = {
+    body: { items: [] },
+    statusCode: 200,
+  };
 
   function keyFor(deviceId: string, family: string): string {
     return `${deviceId}::${family}`;
@@ -184,6 +196,16 @@ export async function startFmcMockServer(): Promise<FmcMockServer> {
           return;
         }
 
+        if (url.startsWith('/api/fmc_platform/v1/license/smartlicenses')) {
+          sendJson(res, licenseResponse.statusCode, licenseResponse.body);
+          return;
+        }
+
+        if (url.includes('/devices/certificates')) {
+          sendJson(res, certificatesResponse.statusCode, certificatesResponse.body);
+          return;
+        }
+
         res.writeHead(404);
         res.end();
       },
@@ -219,6 +241,12 @@ export async function startFmcMockServer(): Promise<FmcMockServer> {
         },
         setAggregateMetricsDelay(ms) {
           aggregateMetricsDelayMs = ms;
+        },
+        setLicenseResponse(body, statusCode = 200) {
+          licenseResponse = { body, statusCode };
+        },
+        setCertificatesResponse(body, statusCode = 200) {
+          certificatesResponse = { body, statusCode };
         },
         get generateTokenCallCount() {
           return generateTokenCallCount;

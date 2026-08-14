@@ -30,6 +30,8 @@ const SCC_ONLY_VARS = [
   'SCC_FMC_UID',
   'SCC_TIME_RANGE',
   'SCC_INVENTORY_POLL_INTERVAL_SECONDS',
+  'SCC_LICENSE_POLL_INTERVAL_SECONDS',
+  'SCC_CERTIFICATE_POLL_INTERVAL_SECONDS',
 ] as const;
 
 const FMC_ONLY_VARS = [
@@ -43,6 +45,8 @@ const FMC_ONLY_VARS = [
   'FMC_DISCOVERY_INTERVAL_SECONDS',
   'FMC_METRIC_FAMILIES',
   'FMC_TIME_RANGE',
+  'FMC_LICENSE_POLL_INTERVAL_SECONDS',
+  'FMC_CERTIFICATE_POLL_INTERVAL_SECONDS',
 ] as const;
 
 /**
@@ -156,10 +160,14 @@ const FMC_ONLY_DEFAULTED_VARS = new Set<string>([
   'FMC_DISCOVERY_INTERVAL_SECONDS',
   'FMC_METRIC_FAMILIES',
   'FMC_TIME_RANGE',
+  'FMC_LICENSE_POLL_INTERVAL_SECONDS',
+  'FMC_CERTIFICATE_POLL_INTERVAL_SECONDS',
 ]);
 const SCC_ONLY_DEFAULTED_VARS = new Set<string>([
   'SCC_TIME_RANGE',
   'SCC_INVENTORY_POLL_INTERVAL_SECONDS',
+  'SCC_LICENSE_POLL_INTERVAL_SECONDS',
+  'SCC_CERTIFICATE_POLL_INTERVAL_SECONDS',
 ]);
 
 function reportCrossBackendVars(
@@ -355,6 +363,20 @@ function validateSccBackend(
     errors,
     { min: 1, max: MAX_TIMER_SECONDS },
   );
+  const licensePollIntervalSeconds = validatePositiveInt(
+    env,
+    'SCC_LICENSE_POLL_INTERVAL_SECONDS',
+    3600,
+    errors,
+    { min: 1, max: MAX_TIMER_SECONDS },
+  );
+  const certificatePollIntervalSeconds = validatePositiveInt(
+    env,
+    'SCC_CERTIFICATE_POLL_INTERVAL_SECONDS',
+    3600,
+    errors,
+    { min: 1, max: MAX_TIMER_SECONDS },
+  );
 
   const baseUrlRaw = nonEmpty(env.SCC_BASE_URL);
   let baseUrlOk = false;
@@ -424,6 +446,8 @@ function validateSccBackend(
     fmcUid: fmcUidRaw,
     timeRange,
     inventoryPollIntervalSeconds,
+    licensePollIntervalSeconds,
+    certificatePollIntervalSeconds,
   };
 }
 
@@ -475,6 +499,20 @@ function validateFmcBackend(
     env,
     'FMC_DISCOVERY_INTERVAL_SECONDS',
     900,
+    errors,
+    { min: 1, max: MAX_TIMER_SECONDS },
+  );
+  const licensePollIntervalSeconds = validatePositiveInt(
+    env,
+    'FMC_LICENSE_POLL_INTERVAL_SECONDS',
+    3600,
+    errors,
+    { min: 1, max: MAX_TIMER_SECONDS },
+  );
+  const certificatePollIntervalSeconds = validatePositiveInt(
+    env,
+    'FMC_CERTIFICATE_POLL_INTERVAL_SECONDS',
+    3600,
     errors,
     { min: 1, max: MAX_TIMER_SECONDS },
   );
@@ -540,6 +578,8 @@ function validateFmcBackend(
     discoveryIntervalSeconds,
     metricFamilies,
     timeRange,
+    licensePollIntervalSeconds,
+    certificatePollIntervalSeconds,
   };
 }
 

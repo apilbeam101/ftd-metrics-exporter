@@ -89,6 +89,17 @@ export function mapSccInventoryResponse(payload: unknown): MapResult<DeviceInven
       entry.redundancyMode = redundancyMode.value;
     }
 
+    const uidOnFmc = readOptionalString(rawDevice, 'uidOnFmc');
+    if (!uidOnFmc.ok) {
+      parseErrors.push({
+        deviceUid: deviceUid.value,
+        group: 'inventory',
+        message: `uidOnFmc on ${deviceName.value} is not a string`,
+      });
+    } else if (uidOnFmc.value !== undefined) {
+      entry.uidOnFmc = uidOnFmc.value;
+    }
+
     snapshots.push(entry);
   }
 

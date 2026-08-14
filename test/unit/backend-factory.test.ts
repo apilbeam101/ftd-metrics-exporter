@@ -33,6 +33,8 @@ test('createBackend: kind "scc" produces a HealthBackend with kind scc', () => {
       fmcUid: 'fmc-uid-1',
       timeRange: '5m',
       inventoryPollIntervalSeconds: 300,
+      licensePollIntervalSeconds: 3600,
+      certificatePollIntervalSeconds: 3600,
     },
   };
   const backend = createBackend({
@@ -55,6 +57,8 @@ test('createBackend: kind "fmc" produces a HealthBackend with kind fmc', () => {
       tlsInsecureSkipVerify: false,
       maxConcurrentRequests: 5,
       discoveryIntervalSeconds: 900,
+      licensePollIntervalSeconds: 3600,
+      certificatePollIntervalSeconds: 3600,
       metricFamilies: ['CPU'],
       timeRange: '5m',
     },
@@ -81,6 +85,8 @@ test('getSccDeviceInventoryReader: returns undefined for an FMC backend', () => 
       tlsInsecureSkipVerify: false,
       maxConcurrentRequests: 5,
       discoveryIntervalSeconds: 900,
+      licensePollIntervalSeconds: 3600,
+      certificatePollIntervalSeconds: 3600,
       metricFamilies: ['CPU'],
       timeRange: '5m',
     },
@@ -104,6 +110,8 @@ test('getSccDeviceInventoryReader: returns a working reader for an SCC backend, 
       fmcUid: 'fmc-uid-1',
       timeRange: '5m',
       inventoryPollIntervalSeconds: 300,
+      licensePollIntervalSeconds: 3600,
+      certificatePollIntervalSeconds: 3600,
     },
   };
   const backend = createBackend({
@@ -130,6 +138,8 @@ test('createBackend: SCC hooks (onParseError etc.) are actually wired, not silen
       fmcUid: 'fmc-uid-1',
       timeRange: '5m',
       inventoryPollIntervalSeconds: 300,
+      licensePollIntervalSeconds: 3600,
+      certificatePollIntervalSeconds: 3600,
     },
   };
   let sawRawResponse = false;
@@ -159,6 +169,8 @@ test('createBackend: FMC optional config fields (domainUuid, caBundlePath) are p
       tlsInsecureSkipVerify: false,
       maxConcurrentRequests: 5,
       discoveryIntervalSeconds: 900,
+      licensePollIntervalSeconds: 3600,
+      certificatePollIntervalSeconds: 3600,
       metricFamilies: ['CPU'],
       timeRange: '5m',
     },
@@ -221,6 +233,8 @@ test('createBackend: a short REQUEST_TIMEOUT_SECONDS is honored by the FMC adapt
         tlsInsecureSkipVerify: true,
         maxConcurrentRequests: 5,
         discoveryIntervalSeconds: 900,
+        licensePollIntervalSeconds: 3600,
+        certificatePollIntervalSeconds: 3600,
         metricFamilies: ['CPU'],
         timeRange: '5m',
       },

@@ -1,3 +1,5 @@
+import type { DeviceCertificateEntry } from '../domain/certificate-status.ts';
+import type { LicenseStatus } from '../domain/license-status.ts';
 import type { DeviceHealthSnapshot } from '../domain/snapshot.ts';
 
 /**
@@ -13,4 +15,26 @@ export interface HealthBackend {
   init(): Promise<void>;
   fetchSnapshot(): Promise<DeviceHealthSnapshot[]>;
   close(): Promise<void>;
+}
+
+/**
+ * Narrow extension interfaces (DESIGN.md §4.6.2), same "narrow the base
+ * `HealthBackend` cast at the one call site that needs it" shape
+ * `SccHealthBackend`/`getSccDeviceInventoryReader` already established for
+ * device inventory — kept as separate interfaces rather than widening
+ * `HealthBackend` itself, even though *both* concrete adapters now
+ * implement both of these (unlike device inventory, which stays SCC-only):
+ * widening the base interface would force every existing `HealthBackend`
+ * mock across the test suite to grow two new methods it has no reason to
+ * care about, for no behavioral benefit over the narrowing-cast pattern
+ * already in place.
+ */
+export interface LicenseStatusBackend extends HealthBackend {
+  /** Sync, no network — safe to call from the render path. Returns `undefined` before the first successful refresh, after `close()`, or if upstream reported no license record. */
+  getLicenseStatus(): LicenseStatus | undefined;
+}
+
+export interface DeviceCertificatesBackend extends HealthBackend {
+  /** Sync, no network — safe to call from the render path. Returns `[]` before the first successful refresh or after `close()`. */
+  getDeviceCertificates(): DeviceCertificateEntry[];
 }

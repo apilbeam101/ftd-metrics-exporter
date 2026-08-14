@@ -30,6 +30,8 @@ export interface SccInventoryDeviceEntry {
   connectivityState?: string;
   configState?: string;
   redundancyMode?: string;
+  /** DESIGN.md §4.6.2: the FMC-side device-record UUID, confirmed live to be `devices/certificates`' join key on this backend — see device-inventory.ts's `uidOnFmc`. */
+  uidOnFmc?: string;
 }
 
 /** The full response body: `{ count, limit, offset, items }` — confirmed live; `items` is the only field this mapper actually needs. */

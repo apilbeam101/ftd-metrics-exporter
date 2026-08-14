@@ -4,6 +4,22 @@ All notable changes to this project are documented in this file. Format follows 
 
 ## [Unreleased]
 
+### Added
+
+- Smart License status (`ftd_license_registration_info`, `ftd_license_authorization_info`, `ftd_license_eval_used`, `ftd_license_eval_expires_in_days`, `ftd_license_last_synchronized_timestamp_seconds`, `ftd_license_last_renewed_timestamp_seconds`) on **both backends**, fleet/manager-scoped — the upstream response carries no device identifier at all. `SCC_LICENSE_POLL_INTERVAL_SECONDS`/`FMC_LICENSE_POLL_INTERVAL_SECONDS` (default 3600s).
+- Certificate status (`ftd_certificate_expiry_timestamp_seconds`, `ftd_certificate_status_info`) on **both backends**, per enrolled certificate's CA/identity component. `SCC_CERTIFICATE_POLL_INTERVAL_SECONDS`/`FMC_CERTIFICATE_POLL_INTERVAL_SECONDS` (default 3600s).
+- `ftd_exporter_license_errors_total`/`ftd_exporter_certificate_errors_total` self-metrics.
+
+### Fixed
+
+- Certificate-expiry field names/endpoint corrected before shipping, based on a live check against both backends rather than the original guess.
+- Adversarial review found and fixed 9 issues before merge: degenerate license/certificate refreshes were treated as successful instead of failures on both backends, SCC's domain-UUID lookup bypassed the shared rate-limit guard, FMC's license/certificate refresh wasn't actually protected the way a comment claimed, duplicate certificates could silently overwrite each other, timestamp parsing accepted invalid calendar dates, and a couple of smaller enum/metric-exposition edge cases.
+
+### Changed
+
+- DESIGN.md §2.3: two narrow extension interfaces (`LicenseStatusBackend`, `DeviceCertificatesBackend`) added alongside the existing SCC-only `SccHealthBackend` pattern, since both new capabilities are implemented on both backends — `HealthBackend` itself stays untouched.
+- `DeviceInventoryEntry` (SCC device inventory) gained `uidOnFmc`, live-confirmed to be `devices/certificates`' join key on SCC — a *third* device identifier distinct from both `/health/metrics`'s `deviceUid` and this same endpoint's own `uid`.
+
 ## [0.2.0] - 2026-08-11
 
 ### Added

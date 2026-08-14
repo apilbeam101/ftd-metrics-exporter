@@ -80,7 +80,7 @@ Every variable is documented in full detail — including how to obtain each cre
 | `SCC_API_TOKEN` | Static bearer token from a dedicated, read-only, API-only SCC user. Shown once at creation — copy it immediately. |
 | `SCC_FMC_UID` | UID of the cloud-delivered FMC (cdFMC) whose devices you want polled. From the SCC inventory UI or `GET /v1/inventory/managers`. |
 
-Optional for SCC: `SCC_TIME_RANGE` (averaging window, defaults to `5m`), `SCC_INVENTORY_POLL_INTERVAL_SECONDS` (device-inventory poll cadence for `ftd_device_info`/`ftd_device_connectivity_up`, defaults to `300`).
+Optional for SCC: `SCC_TIME_RANGE` (averaging window, defaults to `5m`), `SCC_INVENTORY_POLL_INTERVAL_SECONDS` (device-inventory poll cadence for `ftd_device_info`/`ftd_device_connectivity_up`, defaults to `300`), `SCC_LICENSE_POLL_INTERVAL_SECONDS`/`SCC_CERTIFICATE_POLL_INTERVAL_SECONDS` (Smart License/certificate status poll cadence for `ftd_license_*`/`ftd_certificate_*`, each defaults to `3600`).
 
 ### Required — standalone FMC (`BACKEND_TYPE=fmc`)
 
@@ -101,6 +101,7 @@ Optional for FMC, and auto-populated/defaulted if you leave them unset:
 | `FMC_DISCOVERY_INTERVAL_SECONDS` | Defaults to `900` (15 min) — device inventory changes slowly. |
 | `FMC_METRIC_FAMILIES` | Defaults to all five (`CPU,MEM,INTERFACE,DISK_STATS,CHASSIS_STATS`). Narrow this to cut per-cycle request volume on large fleets. |
 | `FMC_TIME_RANGE` | Defaults to `5m`. |
+| `FMC_LICENSE_POLL_INTERVAL_SECONDS` / `FMC_CERTIFICATE_POLL_INTERVAL_SECONDS` | Smart License/certificate status poll cadence for `ftd_license_*`/`ftd_certificate_*`. Each defaults to `3600`. |
 
 ### Optional for both backends
 
@@ -130,6 +131,9 @@ Every device metric is emitted per-device (`device_uid`, `device_name` labels), 
 | High availability | HA role (`ftd_ha_node_info`), HA node status | Only if HA-configured |
 | Remote-access VPN | active/inactive/peak-concurrent session counts | Only if RA VPN-configured |
 | Site-to-site VPN | per-tunnel state | Only if S2S tunnels exist |
+| Device inventory (`ftd_device_*`, SCC only) | `ftd_device_info`, `ftd_device_connectivity_up` — catches a fully `UNREACHABLE` device that vanishes from every other series | On its own poll cadence, independent of the health poll |
+| Smart License status (`ftd_license_*`, both backends) | registration/authorization state, eval usage/days-remaining, last sync/renewal | Fleet/manager-scoped — no `device_uid`/`device_name` labels |
+| Certificate status (`ftd_certificate_*`, both backends) | per-device, per-enrolled-certificate CA/identity expiry and status | Only for a component that actually exists (e.g. self-signed certs have no CA component) |
 | Exporter self-metrics (`ftd_exporter_*`) | `up`, `cache_age_seconds`, `poll_errors_total`, token refresh/reauth counts (FMC) | Yes |
 
 Full metric names, types, labels, and descriptions: [docs/METRICS.md](docs/METRICS.md) (generated from the metric declarations, always in sync).

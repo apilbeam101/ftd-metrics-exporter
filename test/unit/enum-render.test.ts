@@ -2,8 +2,11 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   classifyBinaryEnum,
+  classifyCertificateStatus,
   classifyHaNodeStatus,
   classifyInterfaceType,
+  classifyLicenseAuthStatus,
+  classifyLicenseRegStatus,
   classifyTunnelState,
 } from '../../src/metrics/enum-render.ts';
 
@@ -63,5 +66,39 @@ test('classifyInterfaceType: a novel value passes through UNCHANGED (never "unkn
   assert.deepEqual(result, {
     label: 'VirtualPortChannel',
     unrecognizedRawValue: 'VirtualPortChannel',
+  });
+});
+
+test('classifyLicenseRegStatus: every documented value lowercases with no unrecognized flag; a novel value falls back to "unknown"', () => {
+  for (const raw of ['REGISTERED', 'UNREGISTERED', 'RESERVATION_IN_PROGRESS', 'EVALUATION']) {
+    assert.deepEqual(classifyLicenseRegStatus(raw), { label: raw.toLowerCase() });
+  }
+  assert.deepEqual(classifyLicenseRegStatus('SOMETHING_NEW'), {
+    label: 'unknown',
+    unrecognizedRawValue: 'SOMETHING_NEW',
+  });
+});
+
+test('classifyLicenseAuthStatus: every documented value lowercases with no unrecognized flag; a novel value falls back to "unknown"', () => {
+  for (const raw of [
+    'AUTHORIZED',
+    'AUTHORIZED_RESERVED',
+    'OUT_OF_COMPLIANCE',
+    'AUTHORIZATION_EXPIRED',
+    'NOT_AUTHORIZED',
+  ]) {
+    assert.deepEqual(classifyLicenseAuthStatus(raw), { label: raw.toLowerCase() });
+  }
+  assert.deepEqual(classifyLicenseAuthStatus('SOMETHING_NEW'), {
+    label: 'unknown',
+    unrecognizedRawValue: 'SOMETHING_NEW',
+  });
+});
+
+test('classifyCertificateStatus: AVAILABLE lowercases with no unrecognized flag; a novel value falls back to "unknown"', () => {
+  assert.deepEqual(classifyCertificateStatus('AVAILABLE'), { label: 'available' });
+  assert.deepEqual(classifyCertificateStatus('SOMETHING_NEW'), {
+    label: 'unknown',
+    unrecognizedRawValue: 'SOMETHING_NEW',
   });
 });

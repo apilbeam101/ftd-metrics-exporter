@@ -19,4 +19,14 @@ export interface DeviceInventoryEntry {
   connectivityState?: string;
   /** Raw upstream value (e.g. "STANDALONE"/"HA"); absent if the field itself was missing. */
   redundancyMode?: string;
+  /**
+   * The FMC-side device-record UUID (DESIGN.md §4.6.2) — a *third* identifier
+   * for the same device, distinct from both this endpoint's own `deviceUid`
+   * and `/health/metrics`'s identifier of the same name (which, confusingly,
+   * are the same value here but not on FMC — see inventory-map.ts). Exists
+   * solely so `certificate-map.ts` can join `/devices/certificates`' `id`
+   * field back to a `deviceUid`/`deviceName` pair on the SCC backend; not
+   * used anywhere else. Absent if the field itself was missing.
+   */
+  uidOnFmc?: string;
 }

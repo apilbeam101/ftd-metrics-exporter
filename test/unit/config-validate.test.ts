@@ -536,6 +536,97 @@ test('SCC_INVENTORY_POLL_INTERVAL_SECONDS set while BACKEND_TYPE=fmc does not tr
   );
 });
 
+// --- SCC_LICENSE_POLL_INTERVAL_SECONDS / SCC_CERTIFICATE_POLL_INTERVAL_SECONDS,
+// --- FMC_LICENSE_POLL_INTERVAL_SECONDS / FMC_CERTIFICATE_POLL_INTERVAL_SECONDS (DESIGN.md §4.6.2) ---
+
+for (const name of [
+  'SCC_LICENSE_POLL_INTERVAL_SECONDS',
+  'SCC_CERTIFICATE_POLL_INTERVAL_SECONDS',
+] as const) {
+  test(`${name} defaults to 3600 when unset`, () => {
+    const result = validate(sccEnv());
+    assert.ok(result.ok);
+    assert.ok(result.config.backend.kind === 'scc');
+    if (result.config.backend.kind === 'scc') {
+      const field =
+        name === 'SCC_LICENSE_POLL_INTERVAL_SECONDS'
+          ? 'licensePollIntervalSeconds'
+          : 'certificatePollIntervalSeconds';
+      assert.equal(result.config.backend[field], 3600);
+    }
+  });
+
+  test(`${name} reaches the returned config verbatim when set`, () => {
+    const result = validate(sccEnv({ [name]: '60' }));
+    assert.ok(result.ok);
+    assert.ok(result.config.backend.kind === 'scc');
+    if (result.config.backend.kind === 'scc') {
+      const field =
+        name === 'SCC_LICENSE_POLL_INTERVAL_SECONDS'
+          ? 'licensePollIntervalSeconds'
+          : 'certificatePollIntervalSeconds';
+      assert.equal(result.config.backend[field], 60);
+    }
+  });
+
+  test(`${name}=0 is rejected (must be >= 1)`, () => {
+    const result = validate(sccEnv({ [name]: '0' }));
+    assert.equal(result.ok, false);
+    assert.ok(!result.ok);
+    assert.ok(result.errors.some((e) => e.includes(name)));
+  });
+
+  test(`${name} set while BACKEND_TYPE=fmc does not trigger the cross-backend warning (it is a defaulted var)`, () => {
+    const result = validate(fmcEnv({ [name]: '3600' }));
+    assert.ok(result.ok);
+    assert.ok(!result.warnings.some((w) => w.message.includes(name)));
+  });
+}
+
+for (const name of [
+  'FMC_LICENSE_POLL_INTERVAL_SECONDS',
+  'FMC_CERTIFICATE_POLL_INTERVAL_SECONDS',
+] as const) {
+  test(`${name} defaults to 3600 when unset`, () => {
+    const result = validate(fmcEnv());
+    assert.ok(result.ok);
+    assert.ok(result.config.backend.kind === 'fmc');
+    if (result.config.backend.kind === 'fmc') {
+      const field =
+        name === 'FMC_LICENSE_POLL_INTERVAL_SECONDS'
+          ? 'licensePollIntervalSeconds'
+          : 'certificatePollIntervalSeconds';
+      assert.equal(result.config.backend[field], 3600);
+    }
+  });
+
+  test(`${name} reaches the returned config verbatim when set`, () => {
+    const result = validate(fmcEnv({ [name]: '120' }));
+    assert.ok(result.ok);
+    assert.ok(result.config.backend.kind === 'fmc');
+    if (result.config.backend.kind === 'fmc') {
+      const field =
+        name === 'FMC_LICENSE_POLL_INTERVAL_SECONDS'
+          ? 'licensePollIntervalSeconds'
+          : 'certificatePollIntervalSeconds';
+      assert.equal(result.config.backend[field], 120);
+    }
+  });
+
+  test(`${name}=0 is rejected (must be >= 1)`, () => {
+    const result = validate(fmcEnv({ [name]: '0' }));
+    assert.equal(result.ok, false);
+    assert.ok(!result.ok);
+    assert.ok(result.errors.some((e) => e.includes(name)));
+  });
+
+  test(`${name} set while BACKEND_TYPE=scc does not trigger the cross-backend warning (it is a defaulted var)`, () => {
+    const result = validate(sccEnv({ [name]: '3600' }));
+    assert.ok(result.ok);
+    assert.ok(!result.warnings.some((w) => w.message.includes(name)));
+  });
+}
+
 // --- Regression tests from the Stage 4 adversarial review ---
 
 // A1: unbounded durations become a 1ms Node timer, defeating the SCC floor.

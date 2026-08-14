@@ -1,6 +1,7 @@
 # Metric reference
 
-Generated from `src/metrics/device-metrics.ts`, `src/metrics/inventory-metrics.ts`, and
+Generated from `src/metrics/device-metrics.ts`, `src/metrics/inventory-metrics.ts`,
+`src/metrics/license-metrics.ts`, `src/metrics/certificate-metrics.ts`, and
 `src/metrics/self.ts` by `scripts/generate-metrics-doc.ts`. Do not hand-edit the tables below —
 regenerate instead. For the full design rationale and the metric-surface
 stability contract, see [DESIGN.md](DESIGN.md).
@@ -54,12 +55,41 @@ which has no equivalent inventory endpoint wired up.
 | `ftd_device_connectivity_up` | gauge | device_uid, device_name | 1 if SCC device inventory reports the device ONLINE, 0 if UNREACHABLE. Independent of the health-metrics poll — populated even for a device absent from every other ftd_* series. Omitted when connectivity state is absent or unrecognized. |
 | `ftd_device_info` | gauge | device_uid, device_name, redundancy_mode | Always 1. Informational; from SCC device inventory. redundancy_mode carries standalone/ha (lowercased), or unknown. |
 
+## Smart License status metrics (`ftd_license_*`, both backends)
+
+DESIGN.md §4.6.2. Fleet/manager-scoped — the upstream response carries no device
+identifier at all, so unlike every other metric group in this project, none of these
+gauges carry `device_uid`/`device_name` labels. On its own poll cadence, independent
+of every other poll.
+
+| Metric | Type | Labels | Description |
+|---|---|---|---|
+| `ftd_license_authorization_info` | gauge | auth_status | Always 1 when license authorization status is known. auth_status carries the raw Smart License authorization state (lowercased), or unknown. Omitted if upstream did not report an authorization status. |
+| `ftd_license_eval_expires_in_days` | gauge | (none) | Days remaining in the Smart License evaluation period. Omitted if upstream did not report this field. |
+| `ftd_license_eval_used` | gauge | (none) | 1 if the Smart License evaluation period has been used, 0 otherwise. Omitted if upstream did not report this field. |
+| `ftd_license_last_renewed_timestamp_seconds` | gauge | (none) | Unix timestamp of the last Smart License renewal. Omitted if upstream did not report this field. |
+| `ftd_license_last_synchronized_timestamp_seconds` | gauge | (none) | Unix timestamp of the last successful Smart License synchronization with Cisco. Omitted if upstream did not report this field. |
+| `ftd_license_registration_info` | gauge | reg_status | Always 1 when license status is known. reg_status carries the raw Smart License registration state (lowercased), or unknown. |
+
+## Certificate status metrics (`ftd_certificate_*`, both backends)
+
+DESIGN.md §4.6.2. Per enrolled certificate's CA/identity component. A component
+reported `NOT_APPLICABLE` upstream (e.g. a self-signed certificate has no CA
+component) is omitted entirely, never rendered as zero. On its own poll cadence,
+independent of every other poll.
+
+| Metric | Type | Labels | Description |
+|---|---|---|---|
+| `ftd_certificate_expiry_timestamp_seconds` | gauge | device_uid, device_name, cert_name, cert_type | Unix timestamp when this certificate component (cert_type: ca|identity) expires. Omitted entirely for a component reported NOT_APPLICABLE upstream (e.g. a self-signed certificate has no CA component) — genuinely absent, not zero. |
+| `ftd_certificate_status_info` | gauge | device_uid, device_name, cert_name, cert_type, status | Always 1. Informational; status carries the raw upstream deployment/availability state (lowercased), or unknown. Same omission rule as ftd_certificate_expiry_timestamp_seconds for a NOT_APPLICABLE component. |
+
 ## Exporter self-metrics (`ftd_exporter_*`)
 
 | Metric | Type | Labels | Description |
 |---|---|---|---|
 | `ftd_exporter_build_info` | gauge | version, commit, node_version, backend | Always 1. Labels identify the running build. |
 | `ftd_exporter_cache_age_seconds` | gauge | (none) | Age of the currently served snapshot, computed at scrape time. |
+| `ftd_exporter_certificate_errors_total` | counter | (none) | Device-certificates poll failures (both backends). |
 | `ftd_exporter_devices` | gauge | (none) | Devices in the current snapshot. |
 | `ftd_exporter_devices_discovered` | gauge | (none) | FMC backend: devices found by discovery. |
 | `ftd_exporter_discovery_errors_total` | counter | (none) | FMC backend: discovery failures. |
@@ -67,6 +97,7 @@ which has no equivalent inventory endpoint wired up.
 | `ftd_exporter_fmc_token_reauths_total` | counter | (none) | FMC backend: full re-authentications. |
 | `ftd_exporter_fmc_token_refreshes_total` | counter | (none) | FMC backend: token refreshes. |
 | `ftd_exporter_last_successful_poll_timestamp_seconds` | gauge | (none) | Unix timestamp of the last successful poll. |
+| `ftd_exporter_license_errors_total` | counter | (none) | License-status poll failures (both backends). |
 | `ftd_exporter_parse_errors_total` | counter | group | Parse failures, by metric group. |
 | `ftd_exporter_poll_duration_seconds` | histogram | (none) | Poll cycle latency. |
 | `ftd_exporter_poll_errors_total` | counter | reason | Poll cycle failures, by reason. |

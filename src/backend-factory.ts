@@ -4,10 +4,16 @@ import {
   createSccAdapter,
   type SccHealthBackend,
 } from './backends/scc/adapter.ts';
-import type { HealthBackend } from './backends/types.ts';
+import type {
+  DeviceCertificatesBackend,
+  HealthBackend,
+  LicenseStatusBackend,
+} from './backends/types.ts';
 import type { AppConfig } from './config/types.ts';
+import type { DeviceCertificateEntry } from './domain/certificate-status.ts';
 import type { DeviceInventoryEntry } from './domain/device-inventory.ts';
 import type { ParseError } from './domain/diagnostics.ts';
+import type { LicenseStatus } from './domain/license-status.ts';
 import type { Clock } from './http/clock.ts';
 import type { HttpError } from './http/errors.ts';
 import type { Logger } from './log/logger.ts';
@@ -36,6 +42,10 @@ export interface BackendHooks {
   onSizingWarning?: (message: string) => void;
   /** SCC-only: device-inventory poll failure (DESIGN.md §4.6.1) — the previous inventory list is kept. */
   onInventoryError?: () => void;
+  /** Both backends (DESIGN.md §4.6.2): license-status poll failure. The previous status is kept. */
+  onLicenseError?: () => void;
+  /** Both backends (DESIGN.md §4.6.2): device-certificates poll failure. The previous list is kept. */
+  onCertificateError?: () => void;
   /** SCC-only raw-response attachment point (`--dump-raw`). */
   onRawResponse?: CreateSccAdapterOptions['onRawResponse'];
   /** FMC-only raw-response attachment point (`--dump-raw`) — a distinct signature (per device/family), so kept as its own field rather than overloading `onRawResponse`. */
@@ -69,6 +79,8 @@ export function createBackend(options: CreateBackendOptions): HealthBackend {
       fmcUid: backend.fmcUid,
       timeRange: backend.timeRange,
       inventoryPollIntervalSeconds: backend.inventoryPollIntervalSeconds,
+      licensePollIntervalSeconds: backend.licensePollIntervalSeconds,
+      certificatePollIntervalSeconds: backend.certificatePollIntervalSeconds,
       clock: options.clock,
       logger: options.logger,
       requestTimeoutMs,
@@ -79,6 +91,10 @@ export function createBackend(options: CreateBackendOptions): HealthBackend {
       ...(hooks.onUpstreamRequest !== undefined && { onUpstreamRequest: hooks.onUpstreamRequest }),
       ...(hooks.onUpstreamRetry !== undefined && { onUpstreamRetry: hooks.onUpstreamRetry }),
       ...(hooks.onInventoryError !== undefined && { onInventoryError: hooks.onInventoryError }),
+      ...(hooks.onLicenseError !== undefined && { onLicenseError: hooks.onLicenseError }),
+      ...(hooks.onCertificateError !== undefined && {
+        onCertificateError: hooks.onCertificateError,
+      }),
       ...(hooks.onRawResponse !== undefined && { onRawResponse: hooks.onRawResponse }),
     });
   }
@@ -92,6 +108,8 @@ export function createBackend(options: CreateBackendOptions): HealthBackend {
     timeRange: backend.timeRange,
     maxConcurrentRequests: backend.maxConcurrentRequests,
     discoveryIntervalSeconds: backend.discoveryIntervalSeconds,
+    licensePollIntervalSeconds: backend.licensePollIntervalSeconds,
+    certificatePollIntervalSeconds: backend.certificatePollIntervalSeconds,
     pollIntervalSeconds: options.pollIntervalSeconds,
     clock: options.clock,
     logger: options.logger,
@@ -114,6 +132,10 @@ export function createBackend(options: CreateBackendOptions): HealthBackend {
     ...(hooks.onDiscoveryFailure !== undefined && { onDiscoveryFailure: hooks.onDiscoveryFailure }),
     ...(hooks.onDiscoveryWarning !== undefined && { onDiscoveryWarning: hooks.onDiscoveryWarning }),
     ...(hooks.onSizingWarning !== undefined && { onSizingWarning: hooks.onSizingWarning }),
+    ...(hooks.onLicenseError !== undefined && { onLicenseError: hooks.onLicenseError }),
+    ...(hooks.onCertificateError !== undefined && {
+      onCertificateError: hooks.onCertificateError,
+    }),
     ...(hooks.onFmcRawResponse !== undefined && { onRawResponse: hooks.onFmcRawResponse }),
   });
 }
@@ -137,4 +159,23 @@ export function getSccDeviceInventoryReader(
   }
   const scc = backend as SccHealthBackend;
   return () => scc.getDeviceInventory();
+}
+
+/**
+ * Both backends implement `LicenseStatusBackend`/`DeviceCertificatesBackend`
+ * (DESIGN.md §4.6.2, unlike device inventory above, which stays SCC-only) —
+ * so unlike `getSccDeviceInventoryReader`, there is no `undefined` case to
+ * consider; the cast is always safe for a `HealthBackend` `createBackend`
+ * itself returned.
+ */
+export function getLicenseStatusReader(backend: HealthBackend): () => LicenseStatus | undefined {
+  const withLicense = backend as LicenseStatusBackend;
+  return () => withLicense.getLicenseStatus();
+}
+
+export function getDeviceCertificatesReader(
+  backend: HealthBackend,
+): () => DeviceCertificateEntry[] {
+  const withCertificates = backend as DeviceCertificatesBackend;
+  return () => withCertificates.getDeviceCertificates();
 }

@@ -40,6 +40,10 @@ export interface SccBackendConfig {
   timeRange: TimeRange;
   /** DESIGN.md §4.6.1: device-inventory poll cadence, independent of the health-metrics poll. */
   inventoryPollIntervalSeconds: number;
+  /** DESIGN.md §4.6.2: Smart License status poll cadence, independent of every other poll. */
+  licensePollIntervalSeconds: number;
+  /** DESIGN.md §4.6.2: device-certificates poll cadence, independent of every other poll. */
+  certificatePollIntervalSeconds: number;
 }
 
 export interface FmcBackendConfig {
@@ -54,6 +58,10 @@ export interface FmcBackendConfig {
   discoveryIntervalSeconds: number;
   metricFamilies: MetricFamily[];
   timeRange: TimeRange;
+  /** DESIGN.md §4.6.2: Smart License status poll cadence, independent of every other poll. */
+  licensePollIntervalSeconds: number;
+  /** DESIGN.md §4.6.2: device-certificates poll cadence, independent of every other poll. */
+  certificatePollIntervalSeconds: number;
 }
 
 export type BackendConfig = SccBackendConfig | FmcBackendConfig;

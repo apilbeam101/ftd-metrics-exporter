@@ -1,5 +1,10 @@
 #!/usr/bin/env node
-import { createBackend, getSccDeviceInventoryReader } from './backend-factory.ts';
+import {
+  createBackend,
+  getDeviceCertificatesReader,
+  getLicenseStatusReader,
+  getSccDeviceInventoryReader,
+} from './backend-factory.ts';
 import { HELP_TEXT, parseCli } from './cli.ts';
 import { loadConfig } from './config/load.ts';
 import { formatConfigSummary } from './config/redact-summary.ts';
@@ -7,10 +12,14 @@ import { dumpRaw } from './dump-raw.ts';
 import { createRealClock } from './http/clock.ts';
 import { createLifecycle } from './lifecycle.ts';
 import { createLogger } from './log/logger.ts';
+import { renderCertificateMetrics } from './metrics/certificate-collector.ts';
+import { createCertificateMetrics } from './metrics/certificate-metrics.ts';
 import { renderDeviceMetrics } from './metrics/collector.ts';
 import { createDeviceMetrics } from './metrics/device-metrics.ts';
 import { renderDeviceInventoryMetrics } from './metrics/inventory-collector.ts';
 import { createDeviceInventoryMetrics } from './metrics/inventory-metrics.ts';
+import { renderLicenseMetrics } from './metrics/license-collector.ts';
+import { createLicenseMetrics } from './metrics/license-metrics.ts';
 import { createRegistry } from './metrics/registry.ts';
 import { createSelfMetrics } from './metrics/self.ts';
 import { assertSupportedNodeVersion } from './node-version-check.ts';
@@ -141,6 +150,8 @@ async function main(): Promise<void> {
 
   const deviceMetrics = createDeviceMetrics(registry);
   const deviceInventoryMetrics = createDeviceInventoryMetrics(registry);
+  const licenseMetrics = createLicenseMetrics(registry);
+  const certificateMetrics = createCertificateMetrics(registry);
   const parseErrorTracker = createParseErrorTracker();
   const selfMetricsRecorder = createSelfMetricsRecorder(selfMetrics);
 
@@ -175,12 +186,18 @@ async function main(): Promise<void> {
       onDiscoverySuccess: selfMetricsRecorder.onDiscoverySuccess,
       onDiscoveryFailure: selfMetricsRecorder.onDiscoveryFailure,
       onInventoryError: selfMetricsRecorder.onSccInventoryError,
+      onLicenseError: selfMetricsRecorder.onLicenseError,
+      onCertificateError: selfMetricsRecorder.onCertificateError,
     },
   });
   // `undefined` for FMC (DESIGN.md §4.6.1 — SCC-only) — see
   // getSccDeviceInventoryReader's own doc comment for why the narrowing
   // cast lives in backend-factory.ts rather than here.
   const readDeviceInventory = getSccDeviceInventoryReader(backend);
+  // Both backends implement these (DESIGN.md §4.6.2) — see
+  // getLicenseStatusReader/getDeviceCertificatesReader's own doc comments.
+  const readLicenseStatus = getLicenseStatusReader(backend);
+  const readDeviceCertificates = getDeviceCertificatesReader(backend);
 
   const server = createServer({
     bindAddress: config.metricsBindAddress,
@@ -210,7 +227,20 @@ async function main(): Promise<void> {
               readDeviceInventory(),
             )
           : undefined;
-      selfMetrics.series.set(healthResult.seriesCount + (inventoryResult?.seriesCount ?? 0));
+      const licenseResult = renderLicenseMetrics(
+        { metrics: licenseMetrics, unknownEnumTotal: selfMetrics.unknownEnumTotal },
+        readLicenseStatus(),
+      );
+      const certificateResult = renderCertificateMetrics(
+        { metrics: certificateMetrics, unknownEnumTotal: selfMetrics.unknownEnumTotal },
+        readDeviceCertificates(),
+      );
+      selfMetrics.series.set(
+        healthResult.seriesCount +
+          (inventoryResult?.seriesCount ?? 0) +
+          licenseResult.seriesCount +
+          certificateResult.seriesCount,
+      );
     },
     ...(config.metricsTls !== undefined && { tls: config.metricsTls }),
   });

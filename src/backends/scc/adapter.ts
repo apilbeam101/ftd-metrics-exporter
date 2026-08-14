@@ -1,8 +1,10 @@
 import type { Dispatcher } from 'undici';
 import type { Secret } from '../../config/secret.ts';
 import type { TimeRange } from '../../config/types.ts';
+import type { DeviceCertificateEntry } from '../../domain/certificate-status.ts';
 import type { DeviceInventoryEntry } from '../../domain/device-inventory.ts';
 import type { ParseError } from '../../domain/diagnostics.ts';
+import type { LicenseStatus } from '../../domain/license-status.ts';
 import type { DeviceHealthSnapshot } from '../../domain/snapshot.ts';
 import { type AgentOptions, createAgent } from '../../http/agent.ts';
 import { createHttpClient } from '../../http/client.ts';
@@ -10,7 +12,11 @@ import type { Clock } from '../../http/clock.ts';
 import { classifyNetworkError, HttpError } from '../../http/errors.ts';
 import { createSpacingGuard } from '../../http/spacing.ts';
 import type { Logger } from '../../log/logger.ts';
-import type { HealthBackend } from '../types.ts';
+import { mapDeviceCertificatesResponse } from '../shared/certificate-map.ts';
+import { mapLicenseResponse } from '../shared/license-map.ts';
+import { isPlainObject } from '../shared/numbers.ts';
+import { createRefreshCache, type RefreshCache } from '../shared/refresh-cache.ts';
+import type { DeviceCertificatesBackend, HealthBackend, LicenseStatusBackend } from '../types.ts';
 import { createSccDeviceInventory, type SccDeviceInventory } from './inventory.ts';
 import { mapSccInventoryResponse } from './inventory-map.ts';
 import { mapSccResponse } from './map.ts';
@@ -28,6 +34,10 @@ const ENDPOINT_SUFFIX = '/v1/inventory/managers';
 const ENDPOINT_LABEL = '/v1/inventory/managers/:fmcUid/health/metrics';
 /** DESIGN.md §4.6.1: the device-inventory endpoint, confirmed live 2026-08-11. Not nested under a manager UID — a fleet-wide listing, unlike health/metrics. */
 const INVENTORY_ENDPOINT_PATH = '/v1/inventory/devices';
+/** DESIGN.md §4.6.2: reached through the `cdfmc` proxy — confirmed live (2026-08-14) at this exact path, matching Cisco's `fmc_platform` swagger. */
+const LICENSE_ENDPOINT_PATH = '/v1/cdfmc/api/fmc_platform/v1/license/smartlicenses';
+/** DESIGN.md §4.6.2: same `cdfmc` proxy convention, `fmc_config` this time (domain-scoped, unlike the license endpoint) — confirmed live (2026-08-14). */
+const CERTIFICATES_ENDPOINT_PATH_PREFIX = '/v1/cdfmc/api/fmc_config/v1/domain';
 
 /** DESIGN.md §3.2.4: the documented 2 requests/minute limit, enforced as a 30s floor between requests. */
 export const DEFAULT_MIN_SPACING_MS = 30_000;
@@ -44,6 +54,18 @@ function buildUrl(baseUrl: string, fmcUid: string, timeRange: TimeRange): string
 
 function buildInventoryUrl(baseUrl: string): string {
   return `${trimTrailingSlash(baseUrl)}${INVENTORY_ENDPOINT_PATH}`;
+}
+
+function buildLicenseUrl(baseUrl: string): string {
+  return `${trimTrailingSlash(baseUrl)}${LICENSE_ENDPOINT_PATH}`;
+}
+
+function buildCertificatesUrl(baseUrl: string, domainUuid: string): string {
+  return `${trimTrailingSlash(baseUrl)}${CERTIFICATES_ENDPOINT_PATH_PREFIX}/${encodeURIComponent(domainUuid)}/devices/certificates`;
+}
+
+function buildDomainInfoUrl(baseUrl: string): string {
+  return `${trimTrailingSlash(baseUrl)}/v1/cdfmc/api/fmc_platform/v1/info/domain`;
 }
 
 export interface CreateSccAdapterOptions {
@@ -67,6 +89,10 @@ export interface CreateSccAdapterOptions {
    * `/v1/inventory/devices` response it doesn't care about.
    */
   inventoryPollIntervalSeconds?: number;
+  /** `SCC_LICENSE_POLL_INTERVAL_SECONDS`, DESIGN.md §4.6.2. Same "omit disables, config always sets a real default in production" shape as `inventoryPollIntervalSeconds`. */
+  licensePollIntervalSeconds?: number;
+  /** `SCC_CERTIFICATE_POLL_INTERVAL_SECONDS`, DESIGN.md §4.6.2. Same shape as `licensePollIntervalSeconds`. Certificates additionally need a domain UUID resolved at `init()` time (see `resolveSccDomainUuid`) — if that resolution fails, certificate polling is disabled for the process lifetime regardless of this setting, logged once, and never fails `init()` itself (license status and health/metrics need no domain UUID). */
+  certificatePollIntervalSeconds?: number;
   /** TLS options for the Agent this adapter creates in `init()`. Ignored if `dispatcher` is supplied. */
   agent?: Omit<AgentOptions, 'connections'>;
   /** Test hook: inject a pre-built dispatcher (e.g. pointed at a local test server) instead of having `init()` construct one via `agent`. The adapter still owns closing it. */
@@ -80,7 +106,11 @@ export interface CreateSccAdapterOptions {
   onUpstreamRetry?: (error: HttpError, attemptNumber: number, delayMs: number) => void;
   /** Fired when a device-inventory refresh fails (DESIGN.md §4.6.1) — the attachment point for `ftd_exporter_scc_inventory_errors_total`. The previous inventory list is kept; this never fails the overall `fetchSnapshot()` call. */
   onInventoryError?: () => void;
-  /** `--dump-raw` (Stage 11) attachment point: fired with every response body actually received (any status code, including a 4xx/5xx error body), before `JSON.parse`/mapping and before status-code classification. Never used by the normal poll path. Also fires for the device-inventory request, since it goes through the same HTTP client. */
+  /** Fired when a license-status refresh fails (DESIGN.md §4.6.2) — the attachment point for `ftd_exporter_license_errors_total`. */
+  onLicenseError?: () => void;
+  /** Fired when a device-certificates refresh fails (DESIGN.md §4.6.2) — the attachment point for `ftd_exporter_certificate_errors_total`. */
+  onCertificateError?: () => void;
+  /** `--dump-raw` (Stage 11) attachment point: fired with every response body actually received (any status code, including a 4xx/5xx error body), before `JSON.parse`/mapping and before status-code classification. Never used by the normal poll path. Also fires for the device-inventory/license/certificates requests, since they go through the same HTTP client. */
   onRawResponse?: (statusCode: number, body: string) => void;
 }
 
@@ -94,7 +124,10 @@ export interface CreateSccAdapterOptions {
  * narrows a plain `HealthBackend` to this type at the one call site that
  * needs it, keyed off `config.backend.kind === 'scc'`.
  */
-export interface SccHealthBackend extends HealthBackend {
+export interface SccHealthBackend
+  extends HealthBackend,
+    LicenseStatusBackend,
+    DeviceCertificatesBackend {
   getDeviceInventory(): DeviceInventoryEntry[];
 }
 
@@ -114,6 +147,9 @@ export function createSccAdapter(options: CreateSccAdapterOptions): SccHealthBac
   let httpClient: ReturnType<typeof createHttpClient> | undefined;
   let spacingGuard: ReturnType<typeof createSpacingGuard> | undefined;
   let deviceInventory: SccDeviceInventory | undefined;
+  let licenseCache: RefreshCache<LicenseStatus | undefined> | undefined;
+  let certificatesCache: RefreshCache<DeviceCertificateEntry[]> | undefined;
+  let certificatesDomainUuid: string | undefined;
   let initialized = false;
   let closed = false;
 
@@ -169,6 +205,173 @@ export function createSccAdapter(options: CreateSccAdapterOptions): SccHealthBac
       throw new Error(
         `SCC device-inventory produced zero devices after ${mapResult.parseErrors.length} ` +
           'parse error(s) recorded — treated as a failed refresh, not an empty inventory',
+      );
+    }
+    return mapResult.snapshots;
+  }
+
+  /**
+   * One-time-at-init resolution of the domain UUID `devices/certificates`
+   * needs (DESIGN.md §4.6.2) — unlike health/metrics and license status,
+   * which are not domain-scoped. No config-provided override exists for
+   * SCC (unlike FMC's `FMC_DOMAIN_UUID`): confirmed live (2026-08-14) that
+   * `GET /v1/cdfmc/api/fmc_platform/v1/info/domain` reliably resolves it, so
+   * there is no equivalent auth-response-header shortcut to try first — the
+   * one HTTP call this function makes IS the only resolution path. A
+   * failure here (network, non-2xx, unexpected shape) is not fatal to
+   * `init()`: it disables certificate polling for this process's lifetime
+   * (logged once), the same non-disruptive posture as an inventory hiccup,
+   * since neither health/metrics nor license status depends on this value.
+   *
+   * Shares `spacingGuard` with every other SCC request (`beforeAttempt`
+   * below) — this call happens once, at `init()`, at the same moment
+   * health/metrics and the first inventory refresh are also contending for
+   * the same 2-requests/minute floor; omitting the guard here left it as
+   * the one unmetered SCC request in the file (Opus review finding,
+   * 2026-08-14).
+   */
+  async function resolveSccDomainUuid(): Promise<string | undefined> {
+    const guard = spacingGuard;
+    if (httpClient === undefined || guard === undefined || token === undefined) {
+      return undefined;
+    }
+    try {
+      const response = await httpClient.get(buildDomainInfoUrl(options.baseUrl), {
+        endpoint: '/v1/cdfmc/api/fmc_platform/v1/info/domain',
+        headers: { authorization: `Bearer ${token}` },
+        beforeAttempt: () => guard.wait(),
+        ...(options.onRawResponse !== undefined && { onRawResponse: options.onRawResponse }),
+      });
+      const parsed: unknown = JSON.parse(response.body);
+      if (!isPlainObject(parsed) || !Array.isArray(parsed.items)) {
+        return undefined;
+      }
+      const items = parsed.items.filter(isPlainObject);
+      const global = items.find((item) => item.name === 'Global');
+      const uuid = (global ?? items[0])?.uuid;
+      return typeof uuid === 'string' ? uuid : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
+   * The license-status HTTP call (DESIGN.md §4.6.2) — same shared
+   * `httpClient`/`spacingGuard`/`token` as inventory. A malformed body, or a
+   * structurally-valid-but-erroring body (parse errors recorded but no
+   * status produced), throws rather than resolving to `undefined` — the
+   * same "resolved-zero-with-recorded-errors is a failure, not an empty
+   * success" distinction `fetchDeviceInventoryFromWire` already applies,
+   * generalized to a fleet-scoped record instead of a device list. Without
+   * this, `createRefreshCache`'s "any non-throwing resolution is success"
+   * rule would bank the failure as a real refresh, silently wiping the
+   * last-known-good status and never incrementing
+   * `ftd_exporter_license_errors_total` (Opus review finding, 2026-08-14).
+   * A genuinely empty `items[]` with zero parse errors still resolves to
+   * `undefined` without throwing — see `mapLicenseResponse`'s own doc
+   * comment on why that case is a legitimate "no license record" state.
+   */
+  async function fetchLicenseFromWire(): Promise<LicenseStatus | undefined> {
+    const guard = spacingGuard;
+    if (httpClient === undefined || guard === undefined || token === undefined) {
+      return undefined;
+    }
+    const response = await httpClient.get(buildLicenseUrl(options.baseUrl), {
+      endpoint: LICENSE_ENDPOINT_PATH,
+      headers: { authorization: `Bearer ${token}` },
+      beforeAttempt: () => guard.wait(),
+      ...(options.onRawResponse !== undefined && { onRawResponse: options.onRawResponse }),
+    });
+
+    let payload: unknown;
+    try {
+      payload = JSON.parse(response.body);
+    } catch (cause) {
+      options.onParseError?.({
+        group: 'license',
+        message: `SCC license response body is not valid JSON: ${(cause as Error).message}`,
+      });
+      throw new Error('SCC license response body is not valid JSON');
+    }
+
+    const mapResult = mapLicenseResponse(payload);
+    for (const error of mapResult.parseErrors) {
+      options.onParseError?.(error);
+    }
+    if (mapResult.status === undefined && mapResult.parseErrors.length > 0) {
+      throw new Error(
+        `SCC license status produced no record after ${mapResult.parseErrors.length} parse ` +
+          'error(s) recorded — treated as a failed refresh, not an absent license record',
+      );
+    }
+    return mapResult.status;
+  }
+
+  /**
+   * The device-certificates HTTP call (DESIGN.md §4.6.2). Joins the
+   * response's `id` (confirmed live to be `uidOnFmc`, not `uid`/`deviceUid`
+   * — see certificate-schema.ts) against the *current* device-inventory
+   * cache, so this must only be refreshed after `deviceInventory`'s own
+   * refresh has had a chance to run this cycle (enforced by call order in
+   * `fetchSnapshot()`, not here). A record whose `id` has no match yet
+   * (inventory hasn't completed its first refresh) is reported as a
+   * per-record `ParseError` and skipped, not fatal — mirrors every other
+   * per-item isolation in this codebase.
+   */
+  async function fetchCertificatesFromWire(): Promise<DeviceCertificateEntry[]> {
+    const guard = spacingGuard;
+    const domainUuid = certificatesDomainUuid;
+    if (httpClient === undefined || guard === undefined || token === undefined) {
+      return [];
+    }
+    if (domainUuid === undefined) {
+      return [];
+    }
+    const response = await httpClient.get(buildCertificatesUrl(options.baseUrl, domainUuid), {
+      endpoint: `${CERTIFICATES_ENDPOINT_PATH_PREFIX}/:domainUuid/devices/certificates`,
+      headers: { authorization: `Bearer ${token}` },
+      beforeAttempt: () => guard.wait(),
+      ...(options.onRawResponse !== undefined && { onRawResponse: options.onRawResponse }),
+    });
+
+    let payload: unknown;
+    try {
+      payload = JSON.parse(response.body);
+    } catch (cause) {
+      options.onParseError?.({
+        group: 'certificate',
+        message: `SCC device-certificates response body is not valid JSON: ${(cause as Error).message}`,
+      });
+      throw new Error('SCC device-certificates response body is not valid JSON');
+    }
+
+    const inventoryByUidOnFmc = new Map<string, { deviceUid: string; deviceName: string }>();
+    for (const device of deviceInventory?.getCached() ?? []) {
+      if (device.uidOnFmc !== undefined) {
+        inventoryByUidOnFmc.set(device.uidOnFmc, {
+          deviceUid: device.deviceUid,
+          deviceName: device.deviceName,
+        });
+      }
+    }
+
+    const mapResult = mapDeviceCertificatesResponse(payload, (rawId) =>
+      inventoryByUidOnFmc.get(rawId),
+    );
+    for (const error of mapResult.parseErrors) {
+      options.onParseError?.(error);
+    }
+    // Same "resolved-zero-with-recorded-errors is a failure" distinction as
+    // fetchLicenseFromWire above — critically including the all-join-miss
+    // case (every record's `id` had no match in the current inventory
+    // cache, e.g. inventory has not completed its first refresh yet): that
+    // must retry next cycle, not be banked as a successful empty refresh
+    // that then silences certificate metrics for a full
+    // SCC_CERTIFICATE_POLL_INTERVAL_SECONDS (Opus review finding, 2026-08-14).
+    if (mapResult.snapshots.length === 0 && mapResult.parseErrors.length > 0) {
+      throw new Error(
+        `SCC device-certificates produced zero entries after ${mapResult.parseErrors.length} ` +
+          'parse error(s) recorded — treated as a failed refresh, not an empty certificate list',
       );
     }
     return mapResult.snapshots;
@@ -252,6 +455,47 @@ export function createSccAdapter(options: CreateSccAdapterOptions): SccHealthBac
               }),
             })
           : undefined;
+
+      licenseCache =
+        options.licensePollIntervalSeconds !== undefined
+          ? createRefreshCache<LicenseStatus | undefined>({
+              clock: options.clock,
+              intervalMs: options.licensePollIntervalSeconds * 1000,
+              fetch: fetchLicenseFromWire,
+              initialValue: undefined,
+              ...(options.onLicenseError !== undefined && { onFailure: options.onLicenseError }),
+            })
+          : undefined;
+
+      // Certificates need a domain UUID that license status and
+      // health/metrics do not — resolved once here, soft-failing (see
+      // `resolveSccDomainUuid`'s own doc comment) rather than throwing, so
+      // a resolution failure disables only this one feature.
+      certificatesDomainUuid =
+        options.certificatePollIntervalSeconds !== undefined
+          ? await resolveSccDomainUuid()
+          : undefined;
+      if (
+        options.certificatePollIntervalSeconds !== undefined &&
+        certificatesDomainUuid === undefined
+      ) {
+        options.logger.warn(
+          'SCC certificate-status polling disabled: could not resolve a domain UUID via ' +
+            'GET /v1/cdfmc/api/fmc_platform/v1/info/domain',
+        );
+      }
+      certificatesCache =
+        certificatesDomainUuid !== undefined && options.certificatePollIntervalSeconds !== undefined
+          ? createRefreshCache<DeviceCertificateEntry[]>({
+              clock: options.clock,
+              intervalMs: options.certificatePollIntervalSeconds * 1000,
+              fetch: fetchCertificatesFromWire,
+              initialValue: [],
+              ...(options.onCertificateError !== undefined && {
+                onFailure: options.onCertificateError,
+              }),
+            })
+          : undefined;
     },
 
     async fetchSnapshot(): Promise<DeviceHealthSnapshot[]> {
@@ -263,6 +507,8 @@ export function createSccAdapter(options: CreateSccAdapterOptions): SccHealthBac
         });
       }
       const inventory = deviceInventory;
+      const license = licenseCache;
+      const certificates = certificatesCache;
       const guard = spacingGuard;
       const client = httpClient;
       const authToken = token;
@@ -312,20 +558,25 @@ export function createSccAdapter(options: CreateSccAdapterOptions): SccHealthBac
         return mapResult.snapshots;
       }
 
-      if (inventory === undefined) {
+      if (inventory === undefined && license === undefined && certificates === undefined) {
         return fetchHealthSnapshot();
       }
 
-      // The device-inventory refresh-if-due check runs unconditionally on
-      // every cycle, in `finally`, regardless of how the health-metrics
-      // fetch above resolves — DESIGN.md §4.6.1: an inventory hiccup must
-      // never fail an otherwise-successful health poll, AND a health-side
-      // failure (auth, network) must not silently starve inventory of ever
-      // being checked again.
+      // Every refresh-if-due check runs unconditionally on every cycle, in
+      // `finally`, regardless of how the health-metrics fetch above
+      // resolves — DESIGN.md §4.6.1/§4.6.2: a hiccup in any one of these
+      // must never fail an otherwise-successful health poll, AND a
+      // health-side failure (auth, network) must not silently starve the
+      // others of ever being checked again. Certificates is refreshed
+      // *after* inventory, not concurrently with it, so its `uidOnFmc` join
+      // (fetchCertificatesFromWire) sees this cycle's freshest inventory
+      // list rather than a stale one from before inventory's own refresh.
       try {
         return await fetchHealthSnapshot();
       } finally {
-        await inventory.refreshIfDue();
+        await inventory?.refreshIfDue();
+        await license?.refreshIfDue();
+        await certificates?.refreshIfDue();
       }
     },
 
@@ -344,6 +595,9 @@ export function createSccAdapter(options: CreateSccAdapterOptions): SccHealthBac
       token = undefined;
       dispatcher = undefined;
       deviceInventory = undefined;
+      licenseCache = undefined;
+      certificatesCache = undefined;
+      certificatesDomainUuid = undefined;
     },
 
     getDeviceInventory(): DeviceInventoryEntry[] {
@@ -352,6 +606,14 @@ export function createSccAdapter(options: CreateSccAdapterOptions): SccHealthBac
       // successful refresh or after `close()`, same "nothing yet" semantics
       // as `MetricsCache.get()` returning `undefined`.
       return deviceInventory?.getCached() ?? [];
+    },
+
+    getLicenseStatus(): LicenseStatus | undefined {
+      return licenseCache?.getCached();
+    },
+
+    getDeviceCertificates(): DeviceCertificateEntry[] {
+      return certificatesCache?.getCached() ?? [];
     },
   };
 }

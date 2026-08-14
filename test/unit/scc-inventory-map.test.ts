@@ -100,3 +100,30 @@ test('mapSccInventoryResponse: a non-object item in the items array is skipped w
   assert.equal(result.snapshots.length, 1);
   assert.equal(result.parseErrors.length, 1);
 });
+
+test('mapSccInventoryResponse: captures uidOnFmc — the certificate-endpoint join key (DESIGN.md §4.6.2), distinct from uid/deviceUid', () => {
+  const result = mapSccInventoryResponse({
+    items: [
+      {
+        name: 'ftd-01',
+        uid: 'u1',
+        deviceType: 'CDFMC_MANAGED_FTD',
+        uidOnFmc: 'fmc-record-uuid-1',
+      },
+    ],
+  });
+  const entry = result.snapshots[0];
+  assert.ok(entry);
+  assert.equal(entry.deviceUid, 'u1');
+  assert.equal(entry.uidOnFmc, 'fmc-record-uuid-1');
+});
+
+test('mapSccInventoryResponse: absent uidOnFmc leaves the field undefined, not a parse error', () => {
+  const result = mapSccInventoryResponse({
+    items: [{ name: 'ftd-01', uid: 'u1', deviceType: 'CDFMC_MANAGED_FTD' }],
+  });
+  const entry = result.snapshots[0];
+  assert.ok(entry);
+  assert.equal(entry.uidOnFmc, undefined);
+  assert.deepEqual(result.parseErrors, []);
+});

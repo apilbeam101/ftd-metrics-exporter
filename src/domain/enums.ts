@@ -61,6 +61,49 @@ export const OPERATIONAL_STATUS_VALUES: readonly OperationalStatus[] = ['UP', 'D
 export const PSU_STATUS_VALUES: readonly PsuStatus[] = ['UP', 'DOWN'];
 
 /**
+ * Smart License registration/authorization vocabularies (DESIGN.md §4.6.2),
+ * taken from Cisco's `fmc_swagger.json` `getSmartLicense` example and
+ * confirmed live (2026-08-14): `REGISTERED`/`AUTHORIZED` on SCC,
+ * `REGISTERED`/`OUT_OF_COMPLIANCE` on FMC — the other values are documented
+ * but not yet observed live.
+ */
+export type LicenseRegStatus =
+  | 'REGISTERED'
+  | 'UNREGISTERED'
+  | 'RESERVATION_IN_PROGRESS'
+  | 'EVALUATION';
+export const LICENSE_REG_STATUS_VALUES: readonly LicenseRegStatus[] = [
+  'REGISTERED',
+  'UNREGISTERED',
+  'RESERVATION_IN_PROGRESS',
+  'EVALUATION',
+];
+
+export type LicenseAuthStatus =
+  | 'AUTHORIZED'
+  | 'AUTHORIZED_RESERVED'
+  | 'OUT_OF_COMPLIANCE'
+  | 'AUTHORIZATION_EXPIRED'
+  | 'NOT_AUTHORIZED';
+export const LICENSE_AUTH_STATUS_VALUES: readonly LicenseAuthStatus[] = [
+  'AUTHORIZED',
+  'AUTHORIZED_RESERVED',
+  'OUT_OF_COMPLIANCE',
+  'AUTHORIZATION_EXPIRED',
+  'NOT_AUTHORIZED',
+];
+
+/**
+ * Per-component certificate status (DESIGN.md §4.6.2). `NOT_APPLICABLE` is
+ * deliberately excluded — `certificate-map.ts` filters that state out before
+ * a `DeviceCertificateEntry` is ever produced (DESIGN.md §4.8's absent-not-
+ * zero rule), so it never reaches this classifier. `AVAILABLE` is the only
+ * value confirmed live so far.
+ */
+export type CertificateStatus = 'AVAILABLE';
+export const CERTIFICATE_STATUS_VALUES: readonly CertificateStatus[] = ['AVAILABLE'];
+
+/**
  * Lowercases an upstream enum value for use as a rendered label value
  * (DESIGN.md §4.3 — "Enum values are lowercased in labels"). Use this for
  * enums whose upstream and rendered forms differ only by case (link status,

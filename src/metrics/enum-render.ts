@@ -1,7 +1,10 @@
 import {
+  CERTIFICATE_STATUS_VALUES,
   HA_NODE_STATUS_VALUES,
   HA_NODE_TYPE_VALUES,
   KNOWN_INTERFACE_TYPE_VALUES,
+  LICENSE_AUTH_STATUS_VALUES,
+  LICENSE_REG_STATUS_VALUES,
   lowercaseEnumLabel,
   REDUNDANCY_MODE_VALUES,
   TUNNEL_STATE_VALUES,
@@ -129,6 +132,30 @@ export function classifyConnectivityState(raw: string | undefined): BinaryEnumRe
 /** Info-label classification for SCC device-inventory `redundancy_mode` (DESIGN.md §4.6.1) — same pattern as `classifyHaNodeType`. */
 export function classifyRedundancyMode(raw: string): InfoEnumResult {
   if ((REDUNDANCY_MODE_VALUES as readonly string[]).includes(raw)) {
+    return { label: lowercaseEnumLabel(raw) };
+  }
+  return { label: 'unknown', unrecognizedRawValue: raw };
+}
+
+/** Info-label classification for `ftd_license_registration_info`'s `reg_status` (DESIGN.md §4.6.2) — same pattern as `classifyHaNodeType`. */
+export function classifyLicenseRegStatus(raw: string): InfoEnumResult {
+  if ((LICENSE_REG_STATUS_VALUES as readonly string[]).includes(raw)) {
+    return { label: lowercaseEnumLabel(raw) };
+  }
+  return { label: 'unknown', unrecognizedRawValue: raw };
+}
+
+/** Info-label classification for `ftd_license_authorization_info`'s `auth_status` (DESIGN.md §4.6.2) — same pattern as `classifyHaNodeType`. */
+export function classifyLicenseAuthStatus(raw: string): InfoEnumResult {
+  if ((LICENSE_AUTH_STATUS_VALUES as readonly string[]).includes(raw)) {
+    return { label: lowercaseEnumLabel(raw) };
+  }
+  return { label: 'unknown', unrecognizedRawValue: raw };
+}
+
+/** Info-label classification for `ftd_certificate_status_info`'s `status` (DESIGN.md §4.6.2) — same pattern as `classifyHaNodeType`. `NOT_APPLICABLE` never reaches here (see `CertificateStatus`'s doc comment). */
+export function classifyCertificateStatus(raw: string): InfoEnumResult {
+  if ((CERTIFICATE_STATUS_VALUES as readonly string[]).includes(raw)) {
     return { label: lowercaseEnumLabel(raw) };
   }
   return { label: 'unknown', unrecognizedRawValue: raw };

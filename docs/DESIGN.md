@@ -199,6 +199,17 @@ interface HealthBackend {
 }
 ```
 
+**v1.1 addendum ([§4.6.2](#462-smart-license-status-and-certificate-status-both-backends)):** Smart License status and device-certificate polling are implemented on *both* backends with an identical shape, unlike device inventory (§4.6.1, SCC-only). Rather than widening `HealthBackend` itself, both capabilities live on two narrow extension interfaces (`LicenseStatusBackend`, `DeviceCertificatesBackend`) that both concrete adapters satisfy — the same "narrow the base interface at the one call site that needs it" pattern §4.6.1 already established for `SccHealthBackend.getDeviceInventory()`, just applied twice more:
+
+```ts
+interface LicenseStatusBackend extends HealthBackend {
+  getLicenseStatus(): LicenseStatus | undefined;
+}
+interface DeviceCertificatesBackend extends HealthBackend {
+  getDeviceCertificates(): DeviceCertificateEntry[];
+}
+```
+
 `DeviceHealthSnapshot` is the exporter's own domain model, **not** a pass-through of either vendor payload. Every conditional group is optional at the type level, because the live API sample confirms these keys are *absent*, not null:
 
 ```ts
@@ -709,9 +720,9 @@ Priority framing: **CPU, memory, disk, and interface are the baseline criteria**
 | Sample-window timestamps | SCC (+FMC if available) | **Yes** | Enables per-device staleness alerting |
 | Device connectivity + redundancy mode (`connectivityState`, `redundancyMode`) | SCC `/v1/inventory/devices` | **Yes** | Built (2026-08-11): `ftd_device_info`/`ftd_device_connectivity_up`, on their own poll cadence. See [§4.6.1](#461-device-inventory-ftd_device_-scc-only) |
 | Exporter self-metrics | Both | **Yes** | See [§11](#11-observability-of-the-exporter-itself) |
-| **Smart License status** (`regStatus`, `authStatus`, `evalExpiresInDays`) | SCC `/license/smartlicenses` | **v1.1** | Directly actionable — license compliance alerting. Separate request, so a real (if small) cost. Strong candidate for the first post-v1 addition |
+| **Smart License status** (`regStatus`, `authStatus`, `evalExpiresInDays`) | SCC + FMC `.../license/smartlicenses` | **Built (2026-08-14)** | Live-verified identical on both backends via the shared `fmc_platform` API. Fleet/manager-scoped, not per-device. See [§4.6.2](#462-smart-license-status-and-certificate-status-both-backends) |
 | **Remaining device inventory fields** (`configState`, `conflictDetectionState`, `softwareVersion`, `serial`, `licenseStatus`, `complianceStatus`, `ftdPerformanceTier`, `snortVersion`/`vdbVersion`/`geoDbVersion`/`sruVersion`) | SCC `/v1/inventory/devices` | **v1.1** | `connectivityState`/`redundancyMode` from this same endpoint are already built (row above) — these are the remaining fields, arriving free on the same request. Not modeled yet since none were part of the live capture that motivated the v1 subset (an unreachable device invisible to health/metrics needed only connectivity + identity, not the full record) |
-| **Certificate expiry** (`certificateExpiryDate`, `raVpnCertificateExpiryDate`) | SCC `/v1/inventory/devices` | **v1.1** | Excellent proactive alerting value as `ftd_certificate_expiry_timestamp_seconds`, queryable as days-remaining. Arrives free with the inventory call |
+| **Certificate expiry** (`caCertExpiryDate`, `identityCertExpiryDate`) | SCC + FMC `.../devices/certificates` | **Built (2026-08-14)** | **Correction:** originally assumed to be fields on `/v1/inventory/devices` (`certificateExpiryDate`/`raVpnCertificateExpiryDate`); a live check found no such fields there at all. The real endpoint is a separate one, live-verified on both backends. See [§4.6.2](#462-smart-license-status-and-certificate-status-both-backends) |
 | **Health alerts/events as status gauges** | FMC `/health/alerts`, `/health/events` | **Backlog** | Natural per-module `up`/`down` gauge or event-count metric. Needs a cardinality assessment for module/severity combinations |
 | **FMC-appliance-level health** (device UUID `0`) | FMC | **Backlog** | Distinct from managed-device health; needs its own label design to avoid conflation |
 | **Skip metric requests to `isConnected: false` devices** | FMC | **v1.1 candidate** | `devicerecords`' `isConnected` flag is already parsed by discovery (`FmcDiscoveredDevice.isConnected`) but never consulted before the per-device/per-family fan-out — confirmed via the 2026-08-07 live smoke test, where 3 of 4 lab devices were disconnected and still generated a full family fan-out of `400 Device not connected.` responses every cycle, spending FMC request budget for no data. Not implemented in v1 because discovery runs on its own slower cadence (`FMC_DISCOVERY_INTERVAL_SECONDS`, default 900s) — pre-filtering on a snapshot that stale risks a false-negative skip of a device that reconnected since the last discovery run. Worth reconsidering for large fleets with many standby/disconnected devices, where the budget savings would be more significant. |
@@ -745,6 +756,41 @@ ftd_device_connectivity_up{{d}}                                gauge 1/0
 - **`FtdDeviceUnreachable`** (`alerts/ftd-health.yaml`) is the alert this unblocks — the only rule that can catch a device going fully offline on SCC, since `FtdDeviceMetricsStale` requires a series that no longer exists once a device is `UNREACHABLE`.
 - **FMC has no equivalent wired up.** Whether FMC's device-identity model has the same HA-sharing behavior as SCC is unconfirmed — see [§14.14](#1414-device_uid-is-not-stable-across-an-scc-ha-pair).
 - **Accepted limitation: no staleness signal for the inventory cache itself.** If the inventory *endpoint* fails persistently while health/metrics keeps succeeding, `ftd_device_connectivity_up` silently serves last-known values indefinitely — there is no `ftd_exporter_scc_inventory_*_seconds` analogue to `ftd_exporter_cache_age_seconds`, and no alert on `ftd_exporter_scc_inventory_errors_total` itself. This is consistent with the pre-existing, equally-unalerted `ftd_exporter_discovery_errors_total` on the FMC side, not a new asymmetry this feature introduced — but it does mean a device that goes `UNREACHABLE` *after* the inventory endpoint has broken will not trip `FtdDeviceUnreachable` either. Revisit if this proves operationally significant.
+
+### 4.6.2 Smart License status and certificate status (both backends)
+
+Built 2026-08-14, both closing the two "Strong candidate for the first post-v1 addition" rows §4.6's scope table originally carried. **Both features are live-verified on both SCC and standalone FMC** — a real live check against both backends (not just a swagger reading) is what caught every gotcha below, and corrected two assumptions the original scope table had gotten wrong before any code existed.
+
+```
+ftd_license_registration_info{reg_status="registered|..."}          gauge, always 1 when known
+ftd_license_authorization_info{auth_status="authorized|..."}        gauge, always 1 when known
+ftd_license_eval_used                                                gauge 0/1
+ftd_license_eval_expires_in_days                                     gauge
+ftd_license_last_synchronized_timestamp_seconds                      gauge
+ftd_license_last_renewed_timestamp_seconds                           gauge
+
+ftd_certificate_expiry_timestamp_seconds{d,cert_name,cert_type="ca|identity"}   gauge
+ftd_certificate_status_info{d,cert_name,cert_type,status="available|..."}      gauge, always 1
+```
+
+**Smart License status** — `GET .../license/smartlicenses`, reached at `/v1/cdfmc/api/fmc_platform/v1/license/smartlicenses` on SCC (through the `cdfmc` proxy) and `/api/fmc_platform/v1/license/smartlicenses` directly on FMC. Both live-confirmed to return the exact schema Cisco's own `fmc_swagger.json` documents (`regStatus`, `metadata.authStatus`, `metadata.evalUsed`, `metadata.evalExpiresInDays`, `metadata.lastSynchronizedTime`, `metadata.lastRenewedTime`).
+
+- **Fleet/manager-scoped, not per-device — the original scope table's framing was correct on this point.** The response carries no device identifier at all; there is exactly one logical record for the whole SCC tenant or FMC instance. None of the `ftd_license_*` gauges carry `device_uid`/`device_name` labels, the only metric group in this project with no device label at all.
+- **Timestamp format is a *third* shape, distinct from both backends' own health/metrics conventions**: `"YYYY-MM-DDTHH:MM:SSUTC"` — a literal `UTC` suffix in place of `Z` or an offset, confirmed identical on both live captures (this is the same underlying `fmc_platform` API on both backends, so the two share every quirk here). `backends/shared/license-time.ts` validates this exact shape explicitly rather than trusting `Date.parse`, same discipline as `scc/time.ts`.
+- **A real FMC capture had the `metadata` key appear twice in the same JSON object** (both occurrences identical). Not a bug worth guarding against: `JSON.parse` already resolves a duplicate key to its last occurrence before the mapper ever sees the object.
+- **`SCC_LICENSE_POLL_INTERVAL_SECONDS`/`FMC_LICENSE_POLL_INTERVAL_SECONDS`** (default 3600s), independent of every other poll — license status changes on a timescale of days, not minutes.
+
+**Certificate status — the original scope table's assumption was wrong, corrected here.** The scope table originally guessed `certificateExpiryDate`/`raVpnCertificateExpiryDate` fields on SCC's `/v1/inventory/devices`. A live check found **no such fields exist there at all.** The real endpoint, confirmed live on both backends, is `GET .../devices/certificates` (SCC: `/v1/cdfmc/api/fmc_config/v1/domain/{domainUuid}/devices/certificates`; FMC: `/api/fmc_config/v1/domain/{domainUuid}/devices/certificates`), returning one record per device with an `enrolledCertificates[]` array, each entry carrying independent CA and identity components (`caCertificateStatus`/`caCertExpiryDate`, `identityCertificateStatus`/`identityCertExpiryDate`).
+
+- **A `NOT_APPLICABLE` component is genuinely absent, not zero** (DESIGN.md §4.8's rule, applied here for the first time to a *component within* a record rather than a whole group): a self-signed certificate has no CA component at all, confirmed live on both backends, and its expiry field is the **literal string `"-"`**, paired with `caCertificateStatus: "NOT_APPLICABLE"`. `certificate-map.ts` treats this pairing as the expected absent-signal and produces no `DeviceCertificateEntry` for that component; a component whose status and expiry-sentinel *disagree* (one says applicable, the other says not) is a genuine parse error, not guessed at either way.
+- **The expiry timestamp is a fourth distinct shape**: ISO 8601 at *minute* precision, no seconds field (`"2034-07-16T14:23Z"`) — confirmed on both backends. `backends/shared/certificate-time.ts` accepts this and the ordinary seconds-bearing form, but rejects the license endpoint's `UTC`-suffixed shape and the `"-"` sentinel (the sentinel is the *mapper's* concern, tied to the paired status field, not a timestamp-parsing concern).
+- **The device-identifier join key differs by backend — the sharpest asymmetry this feature surfaced.** On FMC, the certificates response's `id` field is the same device UUID used everywhere else (confirmed live: identical to `devicerecords`' `id`). On SCC, `id` is **`uidOnFmc`** — a *third* identifier for the same device, distinct from both `/health/metrics`'s `deviceUid` and `/v1/inventory/devices`'s own `uid` (which happen to be the same value as each other, but not as `uidOnFmc`). `certificate-map.ts` takes a `lookupDevice(rawId)` callback rather than assuming `id` is directly usable; SCC's adapter builds that lookup from the SCC device-inventory cache's `uidOnFmc` field (added to `DeviceInventoryEntry`/`SccInventoryDeviceEntry` specifically for this), and FMC's builds it from discovery's cached device list. A consequence: **on SCC, certificate polling depends on device inventory having already completed at least one successful refresh** — the certificates refresh always runs after inventory's own refresh within the same `fetchSnapshot()` cycle so it sees the freshest available list, but on a device inventory has never yet seen, a certificate record's `id` simply has no match and is skipped with a diagnostic (`ftd_exporter_parse_errors_total{group="certificate"}`), not a crash.
+- **A device with no enrolled certificate does not appear in the response at all** — confirmed live on both backends (3 of 4 SCC devices, 3 of 4 FMC's own lab fleet). Absent, not an empty array entry.
+- **SCC needs a one-time domain-UUID resolution this feature alone requires.** Health/metrics and license status are not domain-scoped on SCC, but certificates are, and SCC has no config-level override equivalent to FMC's `FMC_DOMAIN_UUID`. Resolved once at `init()` via `GET /v1/cdfmc/api/fmc_platform/v1/info/domain` (the same enumeration-fallback endpoint FMC's own `domain.ts` uses, reached through the `cdfmc` proxy instead of directly). A resolution failure is **not fatal to `init()`** — it disables certificate polling for the process lifetime (logged once) without affecting health/metrics, license status, or device inventory, which need no domain UUID at all.
+- **`SCC_CERTIFICATE_POLL_INTERVAL_SECONDS`/`FMC_CERTIFICATE_POLL_INTERVAL_SECONDS`** (default 3600s), independent of every other poll — one request for the *entire* fleet on both backends (no per-device filter is applied), so the cost is flat regardless of fleet size.
+- **`cert_name` can be an empty string**, not a crash — a live capture's `enrolledCertificates[].certificate` object is itself optional-in-practice; a missing `name` falls back to an empty label value rather than a placeholder that could collide with a real certificate legitimately named the same thing.
+
+**Both features' error counters (`ftd_exporter_license_errors_total`, `ftd_exporter_certificate_errors_total`) follow the same "keep the previous good value, never fail the health poll" discipline §4.6.1 established for device inventory** — a hiccup in either is fully independent of health/metrics, license status, device inventory, and each other.
 
 ### 4.7 Explicitly excluded from scope
 
@@ -978,6 +1024,8 @@ Every variable below appears in the checked-in **`example.env`** with a blank or
 | `SCC_FMC_UID` | UID of the cloud-delivered FMC whose managed devices are polled. **Obtain via:** the SCC inventory UI or `GET /v1/inventory/managers` | **Yes** | — | `00000000-0000-0000-0000-000000000000` |
 | `SCC_TIME_RANGE` | Averaging window requested upstream: `5m` \| `15m` \| `30m` \| `1h`. **This value genuinely reaches the request** | No | `5m` | `5m` |
 | `SCC_INVENTORY_POLL_INTERVAL_SECONDS` | Device-inventory poll cadence ([§4.6.1](#461-device-inventory-ftd_device_-scc-only)), independent of `SCC_TIME_RANGE`'s health-metrics poll. Shares the health-metrics request's spacing guard, so the 2 req/min limit holds structurally regardless of this value | No | `300` | `300` |
+| `SCC_LICENSE_POLL_INTERVAL_SECONDS` | Smart License status poll cadence ([§4.6.2](#462-smart-license-status-and-certificate-status-both-backends)), independent of every other poll | No | `3600` | `3600` |
+| `SCC_CERTIFICATE_POLL_INTERVAL_SECONDS` | Device-certificates poll cadence ([§4.6.2](#462-smart-license-status-and-certificate-status-both-backends)), independent of every other poll. Requires a one-time domain-UUID resolution at startup with no config override on this backend — a resolution failure disables this one feature, logged once, without affecting anything else | No | `3600` | `3600` |
 
 ### 8.3 Standalone FMC backend (required when `BACKEND_TYPE=fmc`)
 
@@ -993,6 +1041,8 @@ Every variable below appears in the checked-in **`example.env`** with a blank or
 | `FMC_DISCOVERY_INTERVAL_SECONDS` | Device-inventory refresh cadence, independent of the metric poll | No | `900` | `900` |
 | `FMC_METRIC_FAMILIES` | Comma-separated subset of `CPU,MEM,INTERFACE,DISK_STATS,CHASSIS_STATS`. Reduce to lower request volume on large fleets | No | all five | `CPU,MEM,INTERFACE,DISK_STATS` |
 | `FMC_TIME_RANGE` | Averaging window: `5m` \| `15m` \| `30m` \| `1h` | No | `5m` | `5m` |
+| `FMC_LICENSE_POLL_INTERVAL_SECONDS` | Smart License status poll cadence ([§4.6.2](#462-smart-license-status-and-certificate-status-both-backends)), independent of every other poll | No | `3600` | `3600` |
+| `FMC_CERTIFICATE_POLL_INTERVAL_SECONDS` | Device-certificates poll cadence ([§4.6.2](#462-smart-license-status-and-certificate-status-both-backends)), independent of every other poll. One request for the entire fleet, not per-device | No | `3600` | `3600` |
 
 ### 8.4 Exporter TLS listener (optional — see [§9.2](#92-the-exporters-own-metrics-endpoint))
 
@@ -1245,6 +1295,8 @@ The exporter exposes its own metrics on the **same `/metrics` endpoint**, under 
 | `ftd_exporter_devices_discovered` | gauge | FMC backend: devices found by discovery. Compare against `_devices` to spot per-device failures |
 | `ftd_exporter_discovery_errors_total` | counter | FMC backend: discovery failures |
 | `ftd_exporter_scc_inventory_errors_total` | counter | SCC backend: device-inventory poll failures ([§4.6.1](#461-device-inventory-ftd_device_-scc-only)). The previous inventory list is kept on failure |
+| `ftd_exporter_license_errors_total` | counter | Both backends: license-status poll failures ([§4.6.2](#462-smart-license-status-and-certificate-status-both-backends)). The previous status is kept on failure |
+| `ftd_exporter_certificate_errors_total` | counter | Both backends: device-certificates poll failures ([§4.6.2](#462-smart-license-status-and-certificate-status-both-backends)). The previous list is kept on failure |
 | `ftd_exporter_series` | gauge | Series currently rendered. Cardinality tripwire, especially for S2S tunnels |
 | `ftd_exporter_parse_errors_total` | counter | Labels: `group`. Schema drift in the upstream API becomes visible instead of silent |
 | `ftd_exporter_unknown_enum_total` | counter | Labels: `metric`, `value`. Catches new Cisco enum values ([§4.4](#44-representing-status-enums)) |
@@ -1467,7 +1519,8 @@ Confirmed live (2026-08-11) against a real SCC HA pair: `/health/metrics` gives 
 | Chassis | `chassisStatsHealthMetrics` in the health payload | `/chassis/fmcmanagedchassis/{containerUUID}/{faultsummary\|interfacesummary\|inventorysummary}` |
 | Interface stats (alt. path) | — | `/devices/devicerecords/{containerUUID}/fpinterfacestatistics` (**overlap unresolved**, [§14.2](#142-which-interface-statistics-source-on-fmc-is-authoritative--must-resolve)) |
 | Health alerts/events | — (wrapper payload only) | `GET /health/alerts`, `GET /health/events` |
-| Licensing | `GET .../license/smartlicenses` (`regStatus`, `metadata.authStatus`, `evalExpiresInDays`) | `/api/fmc_platform/v1/...` licensing family |
+| Licensing | `GET /v1/cdfmc/api/fmc_platform/v1/license/smartlicenses` (`regStatus`, `metadata.authStatus`, `evalExpiresInDays`) — live-verified 2026-08-14 | `GET /api/fmc_platform/v1/license/smartlicenses` — identical schema, live-verified 2026-08-14 |
+| Certificate status | `GET /v1/cdfmc/api/fmc_config/v1/domain/{domainUuid}/devices/certificates` — `id` is `uidOnFmc`, not `uid`/`deviceUid`; live-verified 2026-08-14 | `GET /api/fmc_config/v1/domain/{domainUuid}/devices/certificates` — `id` is the same device UUID used everywhere else; live-verified 2026-08-14 |
 | Fleet aggregations | `GET /v1/inventory/devices/health/metrics/aggregations` (30m/2h/6h/24h/7d) | — |
 | On-prem connector status | `GET /v1/connectors/sdcs` | N/A |
 | Deprecated / avoid | `GET /v1/tenants` (**deprecated**) | `GET /health/metricconfiguration` (**undocumented**) |
