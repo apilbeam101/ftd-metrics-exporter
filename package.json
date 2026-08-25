@@ -1,6 +1,6 @@
 {
   "name": "ftd-metrics-exporter",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Prometheus exporter for Cisco FTD firewall health metrics (SCC/cdFMC and standalone on-prem FMC backends)",
   "license": "Apache-2.0",
   "repository": {

@@ -4,6 +4,8 @@ All notable changes to this project are documented in this file. Format follows 
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-25
+
 ### Added
 
 - `scripts/demo-metrics-server.ts`: fabricates a full-coverage synthetic fleet through the real collector code, kept in-repo for regenerating dashboard screenshots (e.g. `dashboards/ftd-health-dashboard.png`, added alongside it).
@@ -13,7 +15,8 @@ All notable changes to this project are documented in this file. Format follows 
 
 ### Fixed
 
-- Dashboard "Per-device summary" panel (id 12) used the `joinByField` transform across 6 instant-query targets; `joinByField` assumes one frame per target, but Prometheus's datasource returns one frame *per series* for an instant query, so any target matching more than one device collapsed the whole join to a single bogus row — reproducible on nearly every real fleet. Fixed by switching to `merge` (the transform "Current HA role" already used successfully for the same instant-query shape). `dashboards/ftd-health.json` regenerated.
+- Dashboard "Per-device summary" panel (id 12) used the `joinByField` transform across 6 instant-query targets; `joinByField` assumes one frame per target, but Prometheus's datasource returns one frame *per series* for an instant query, so any target matching more than one device collapsed the whole join to a single bogus row — reproducible on nearly every real fleet. First fixed by switching to `merge`, then found (see next entry) that `merge` alone doesn't fully solve this shape either.
+- Five dashboard table panels — "Per-device summary" (id 12), "Current HA role" (id 30), "Interface inventory", "Exporter build info", and "S2S tunnels not up" — were broken by `merge`'s real behavior: it concatenates same-shaped frames into rows but never promotes a Prometheus series' labels to table fields, so `organize`'s label-keyed renames matched nothing. Fixed per panel shape (`labelsToFields` alone, `labelsToFields`+`merge`, or `joinByLabels` pivoting on `__name__` with a PromQL-level `group_left`/`max by(...)` normalization where target label schemas differed); "Per-device summary" also dropped its HA columns entirely rather than force the same asymmetric-schema join a second time. Found live against a real Grafana 13.1.3 instance during the Stage 16 soak test. Adversarial review caught two more real bugs before this shipped: a `sum by(...)` that would silently add two scrape targets' values together under a multi-exporter overlap, and a `group_left` match list missing `job`/`instance` that would hard-error the whole panel under the same overlap. Added a regression test guarding the root cause generically (`test/unit/dashboard-and-alerts.test.ts`: every use of `merge` must be preceded by `labelsToFields`). Full writeup in [DESIGN.md §14.15](docs/DESIGN.md).
 - Certificate-expiry field names/endpoint corrected before shipping, based on a live check against both backends rather than the original guess.
 - Adversarial review found and fixed 9 issues before merge: degenerate license/certificate refreshes were treated as successful instead of failures on both backends, SCC's domain-UUID lookup bypassed the shared rate-limit guard, FMC's license/certificate refresh wasn't actually protected the way a comment claimed, duplicate certificates could silently overwrite each other, timestamp parsing accepted invalid calendar dates, and a couple of smaller enum/metric-exposition edge cases.
 
@@ -60,6 +63,7 @@ Pre-1.0 (`0.x`) — see [docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md) f
 
 - Chassis, HA, and RA VPN/S2S VPN metric groups on both backends — field names may change in a minor release until validated against real hardware/configurations.
 
-[Unreleased]: https://github.com/apilbeam101/ftd-metrics-exporter/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/apilbeam101/ftd-metrics-exporter/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/apilbeam101/ftd-metrics-exporter/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/apilbeam101/ftd-metrics-exporter/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/apilbeam101/ftd-metrics-exporter/releases/tag/v0.1.0
