@@ -117,6 +117,31 @@ function declaredLabels(): Map<string, Set<string>> {
   return map;
 }
 
+/**
+ * `merge` concatenates same-shaped frames into rows; it never promotes a
+ * series' labels to fields. A panel using `merge` to combine multiple
+ * per-series instant-query targets needs `labelsToFields` first, or an
+ * `organize` step renaming label names on top of it silently renames
+ * nothing. Returns a description of the problem, or `null` if the panel is
+ * fine (either doesn't use `merge` at all, or uses it correctly).
+ */
+function mergeWithoutLabelsToFields(panel: {
+  title: string;
+  transformations?: Array<{ id: string }>;
+}): string | null {
+  const ids = panel.transformations?.map((t) => t.id) ?? [];
+  const mergeAt = ids.indexOf('merge');
+  if (mergeAt === -1) return null;
+  const labelsToFieldsAt = ids.indexOf('labelsToFields');
+  if (labelsToFieldsAt === -1) {
+    return `panel "${panel.title}" uses "merge" with no "labelsToFields" anywhere in its transformations`;
+  }
+  if (labelsToFieldsAt >= mergeAt) {
+    return `panel "${panel.title}" uses "labelsToFields" after "merge", not before`;
+  }
+  return null;
+}
+
 describe('Stage 15 dashboard and alert rules', () => {
   describe('metric-name cross-check against real declarations', () => {
     const declared = declaredMetricNames();
@@ -318,6 +343,7 @@ describe('Stage 15 dashboard and alert rules', () => {
         targets?: Array<{ expr: string; datasource?: { uid?: string } }>;
         fieldConfig?: { defaults?: Record<string, unknown> };
         gridPos: { h: number; w: number; x: number; y: number };
+        transformations?: Array<{ id: string }>;
       }>;
     };
 
@@ -533,6 +559,50 @@ describe('Stage 15 dashboard and alert rules', () => {
     it('panel ids are unique', () => {
       const ids = dashboard.panels.map((p) => p.id);
       assert.equal(new Set(ids).size, ids.length, 'duplicate panel ids');
+    });
+
+    it('every use of the "merge" transform is preceded by "labelsToFields" on the same panel', () => {
+      // Four panels (Per-device summary, Interface inventory, Current HA
+      // role, S2S tunnels not up) were found live-broken because a
+      // Prometheus instant query returns one series per label combination,
+      // carrying its labels as field *metadata*, not as table columns --
+      // `merge` only concatenates same-shaped frames into rows, it never
+      // promotes that metadata to columns, so an `organize` step renaming
+      // label names on top of a bare `merge` silently renames nothing and
+      // the panel renders a degenerate single row or "No data". This is a
+      // regression guard for the root cause, not just the four instances of
+      // it found this session -- a future panel making the same mistake
+      // fails here rather than shipping unnoticed (the bug is invisible to
+      // every other test in this file, and was invisible in the running
+      // dashboard on any fleet without the exact conditional-group data
+      // needed to notice the missing rows).
+      for (const panel of dashboard.panels) {
+        const problem = mergeWithoutLabelsToFields(panel);
+        assert.equal(
+          problem,
+          null,
+          problem ?? 'unreachable — assert.equal only reads this on failure',
+        );
+      }
+    });
+
+    it('detects a bare "merge" with no "labelsToFields" (negative control)', () => {
+      // Proves the check above is not vacuous. "Current HA role" is real,
+      // currently-correct panel data -- stripping its "labelsToFields" step
+      // reproduces exactly the shape of the bug this session found live.
+      const haRolePanel = dashboard.panels.find((p) => p.title === 'Current HA role');
+      assert.ok(haRolePanel, 'fixture assumption stale: no panel titled "Current HA role"');
+      const transformations = haRolePanel.transformations ?? [];
+      const ids = transformations.map((t) => t.id);
+      assert.ok(
+        ids.includes('labelsToFields') && ids.includes('merge'),
+        'fixture assumption stale: "Current HA role" no longer uses labelsToFields+merge',
+      );
+      const mutated = {
+        ...haRolePanel,
+        transformations: transformations.filter((t) => t.id !== 'labelsToFields'),
+      };
+      assert.notEqual(mergeWithoutLabelsToFields(mutated), null);
     });
   });
 

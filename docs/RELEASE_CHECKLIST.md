@@ -17,6 +17,50 @@ first item.
 - [ ] **Third-party SCC validation** — recruit at least one external SCC
       deployment; capture the outcome here.
 
+## Stage 16 — live validation (soak tests)
+
+Per `docs/IMPLEMENTATION_PLAN.md`'s Stage 16 scope — **not** the same as
+`docs/LIVE_SMOKE_TEST.md`'s ~10-15 minute per-surface smoke test (see that
+file's "Not the same as Stage 16" note). Sustained runs, ≥7 days, watching
+for rate-limit behavior, memory growth, and stable series count over time
+rather than a handful of poll cycles.
+
+- [ ] **7-day SCC soak** (maintainer tenant). Pass criteria (Implementation
+      Plan §16 testing step 1): zero `poll_errors_total{reason="rate_limited"}`,
+      `cache_age_seconds` never exceeding ~2× the poll interval, flat heap.
+      **In progress, started 2026-08-25.** Built from a clean clone of
+      `origin/main` @ `1878bed` on the Ubuntu test VM, running via systemd
+      (matching `deploy/systemd/`, not a terminal session), scraped by the
+      VM's real microk8s Prometheus Operator with `alerts/ftd-health.yaml`
+      loaded as a `PrometheusRule` and `dashboards/ftd-health.json` imported
+      into the same Grafana used for Stage 15. First ~2 hours: `ftd_exporter_up`
+      steady at 1, `cache_age_seconds` never exceeding ~90s against a 60s poll
+      interval (well inside the 2× bound — the one over-budget cycle was the
+      cold-start cycle refreshing the license/certificate/inventory caches for
+      the first time simultaneously, not a rate-limit or design problem),
+      `ftd_exporter_series` stable at 266, zero `poll_errors_total` of any
+      reason, zero `ftd_exporter_license_errors_total`/`ftd_exporter_certificate_errors_total`,
+      heap stable in the ~17-21MB range. This is also the first sustained run
+      for the license/certificate metrics (added 2026-08-14, never previously
+      soak-tested) and confirms the SCC HA-shared-`device_uid` behavior
+      (§14.14) live on a real HA pair distinct from the one used to originally
+      find it. Will update with the full 7-day result.
+- [ ] **7-day FMC soak** (lab, 4 FTDv). Not started this session — see
+      `docs/LIVE_SMOKE_TEST.md`'s note on the FMC-lab/Docker-K8s-host mutually
+      exclusive network routes; this leg needs the FMC lab route specifically,
+      which was not available during this soak-test session (the Ubuntu VM
+      route was used instead, for the SCC leg).
+- [x] **Two dashboard panels CLAUDE.md flagged as unconfirmed** ("Interface
+      inventory", "Exporter build info") checked in a genuine non-headless
+      browser session per the plan — both reproduced as real, live bugs, not
+      headless-capture artifacts. Root-caused and fixed; see
+      [DESIGN.md §14.15](DESIGN.md#1415-four-dashboard-table-panels-silently-broken-by-a-grafana-transform-that-doesnt-do-what-its-name-suggests)
+      for the full writeup. Two more panels ("Per-device summary", "Current HA
+      role") turned out to share the same root cause and got the same fix; a
+      fifth ("S2S tunnels not up") was caught only by adversarial review, not
+      live reproduction. All five re-verified live against the real
+      Grafana/Prometheus this soak test is running against.
+
 ## First publish only (GHCR/npm registry setup)
 
 - [x] Staged-file audit before the first `git` push: confirm `.env`,

@@ -409,41 +409,63 @@ const row1: RowSpec = {
       width: 24,
       height: 10,
       description:
-        'The visual anchor of the dashboard (DESIGN.md §10.2): one row per device with system CPU, memory, disk, HA status/role, and named-interfaces-down count, cell-coloured by the same thresholds as the alerts. HA columns are empty for non-HA devices, which is expected rather than a fault.',
+        'The visual anchor of the dashboard (DESIGN.md §10.2): one row per device with system CPU, memory, disk, and named-interfaces-down count, cell-coloured by the same thresholds as the alerts. See the "Current HA role" panel below for HA status/role -- joining that per-state-set data onto this table would require every row to carry the same HA labels, which non-HA devices structurally cannot (verified live: forcing it produced either a fragmented duplicate row per device or silently dropped the HA columns entirely, depending on which `joinByLabels` `join` list was used).',
       targets: [
         {
           refId: 'A',
-          expr: `ftd_cpu_usage_ratio{${SCOPE},component="system"}`,
-          legendFormat: 'cpu',
+          // `max by(...)` of a single already-filtered series is that
+          // series' own value, unchanged -- used here purely to drop the
+          // `component` label (not in the `by` list) so this target's rows
+          // share a join key with C/F below, which never had a `component`
+          // label to begin with (verified live). `__name__` is included in
+          // the `by` list so the real metric name survives the aggregation
+          // instead of being dropped like any other aggregation would
+          // (see target F's comment) -- `label_replace` was tried first and
+          // rejected for the same fold-ratio-guard reason described there.
+          // `max`, not `sum`: the `join` below deliberately omits `job`/
+          // `instance` (see its own comment), so two scrape targets
+          // reporting the same device would otherwise have their CPU
+          // values silently added together into a physically impossible
+          // number instead of collapsing onto one row (Opus review
+          // finding). `max` degrades to "pick one" under that overlap
+          // instead of fabricating a value — no worse than every other
+          // target here, all of which face the same latent overlap.
+          expr: `max by (__name__, device_uid, device_name) (ftd_cpu_usage_ratio{${SCOPE},component="system"})`,
           instant: true,
         },
         {
           refId: 'B',
-          expr: `ftd_memory_usage_ratio{${SCOPE},component="system"}`,
-          legendFormat: 'memory',
-          instant: true,
-        },
-        { refId: 'C', expr: `ftd_disk_usage_ratio{${SCOPE}}`, legendFormat: 'disk', instant: true },
-        {
-          refId: 'D',
-          // The state set collapses to a single status string per device via
-          // the `status` label of whichever series is 1.
-          expr: `ftd_ha_node_status{${SCOPE}} == 1`,
-          legendFormat: 'ha_status',
+          expr: `max by (__name__, device_uid, device_name) (ftd_memory_usage_ratio{${SCOPE},component="system"})`,
           instant: true,
         },
         {
-          refId: 'E',
-          expr: `ftd_ha_node_info{${SCOPE}} == 1`,
-          legendFormat: 'ha_role',
+          refId: 'C',
+          // Normalized the same way as A/B even though disk has no
+          // `component` label to strip, purely for the same job/instance
+          // overlap reason given on A above -- an unnormalized target
+          // sharing a join key with normalized ones is an inconsistency
+          // waiting to become a bug the moment a second scrape target
+          // exists.
+          expr: `max by (__name__, device_uid, device_name) (ftd_disk_usage_ratio{${SCOPE}})`,
           instant: true,
         },
         {
           refId: 'F',
-          expr:
-            `count by (device_uid, device_name) (\n` +
-            `${namedInterfacesOnly(`ftd_interface_operational_up{${SCOPE_IF}}`, '== 0')}\n)`,
-          legendFormat: 'ifaces_down',
+          // `count by(...)` drops `__name__` like any aggregation, which
+          // would otherwise leave this target's column unpivoted by
+          // `joinByLabels` below -- including `__name__` in the `by(...)`
+          // list keeps it instead, since every input series shares the same
+          // name. (A `label_replace`-injected synthetic name was tried
+          // first and rejected: it isn't a real declared metric, which
+          // test/unit/dashboard-and-alerts.test.ts's cross-check against
+          // src/metrics/ correctly flags, and it adds a `label_replace` use
+          // with no matching `max by(...)` fold, which the *other*
+          // label_replace/fold-ratio guard in that same file also flags --
+          // this construct is unrelated to that guard's actual concern, but
+          // the test counts textual occurrences fleet-wide, not per
+          // construct.) The inherited name (ftd_interface_operational_up)
+          // is renamed for display below same as everything else.
+          expr: `count by (__name__, device_uid, device_name) (\n${namedInterfacesOnly(`ftd_interface_operational_up{${SCOPE_IF}}`, '== 0')}\n)`,
           instant: true,
         },
       ],
@@ -454,32 +476,35 @@ const row1: RowSpec = {
         // instant query, so a 5-device target already arrives as 5 frames.
         // `joinByField` collapsed all ~19 frames from A-F down to a single
         // row (verified live: the rendered table showed one row with only
-        // target A's first series). `merge` is built for exactly this shape
-        // -- combining many single/few-row frames into one table aligned on
-        // shared field values -- and is what "Current HA role" below
-        // already uses successfully for the same instant-query pattern.
-        { id: 'merge', options: {} },
+        // target A's first series). `merge` doesn't fix this either -- it
+        // groups frames by their full field-name signature, and since each
+        // target's value field is named after its own metric, A-F never
+        // share a signature and land in disjoint row groups instead of one
+        // row per device (verified live). `joinByLabels`, pivoting on
+        // `__name__` and joining on exactly (device_name, device_uid), is
+        // the transform actually built for this -- confirmed live to
+        // produce one row per device with every column correctly aligned,
+        // once every target's remaining labels were normalized to that
+        // same pair (see each target's own comment above).
+        { id: 'joinByLabels', options: { value: '__name__', join: ['device_name', 'device_uid'] } },
         {
           id: 'organize',
           options: {
             excludeByName: {
               Time: true,
               device_uid: true,
-              component: true,
-              node_type: true,
+              endpoint: true,
+              instance: true,
+              job: true,
+              namespace: true,
+              service: true,
             },
             renameByName: {
               device_name: 'Device',
-              // `merge`'s output field names come from each target's
-              // legendFormat directly (no refId suffixing, unlike
-              // joinByField) -- these must match targets A/B/C/D/F's
-              // legendFormat strings above verbatim.
-              cpu: 'CPU (system)',
-              memory: 'Memory (system)',
-              disk: 'Disk',
-              status: 'HA status',
-              ha_role: '',
-              ifaces_down: 'Named ifaces down',
+              ftd_cpu_usage_ratio: 'CPU (system)',
+              ftd_memory_usage_ratio: 'Memory (system)',
+              ftd_disk_usage_ratio: 'Disk',
+              ftd_interface_operational_up: 'Named ifaces down',
             },
           },
         },
@@ -893,18 +918,39 @@ const row4: RowSpec = {
         },
       ],
       transformations: [
-        { id: 'merge', options: {} },
+        // `merge` (see git history for the attempt) groups frames by their
+        // full field-name signature, including the value field's name --
+        // and a Prometheus instant query names each series' value field
+        // after its own metric, so target A's (ftd_interface_operational_up)
+        // and target B's (ftd_interface_link_up) rows never share a
+        // signature and land in two disjoint row groups instead of one row
+        // per (device, interface), no matter what runs before it (verified
+        // live, including with `labelsToFields` first). `joinByLabels` is
+        // the purpose-built replacement: pivot on the `__name__` label so
+        // each metric becomes its own column, joined by every other shared
+        // label -- confirmed live to produce exactly one row per (device,
+        // interface) with both value columns populated.
+        { id: 'joinByLabels', options: { value: '__name__' } },
         {
           id: 'organize',
           options: {
-            excludeByName: { Time: true, device_uid: true, __name__: true },
+            excludeByName: {
+              Time: true,
+              device_uid: true,
+              __name__: true,
+              endpoint: true,
+              instance: true,
+              job: true,
+              namespace: true,
+              service: true,
+            },
             renameByName: {
               device_name: 'Device',
               interface: 'Interface (hardware id)',
               interface_name: 'Configured name',
               interface_type: 'Type',
-              'Value #A': 'Operational',
-              'Value #B': 'Link',
+              ftd_interface_operational_up: 'Operational',
+              ftd_interface_link_up: 'Link',
             },
           },
         },
@@ -970,18 +1016,41 @@ const row5: RowSpec = {
       targets: [
         {
           refId: 'A',
-          expr: `ftd_ha_node_info{${SCOPE}} == 1`,
-          legendFormat: 'role',
-          instant: true,
-        },
-        {
-          refId: 'B',
-          expr: `ftd_ha_node_status{${SCOPE}} == 1`,
-          legendFormat: 'status',
+          // A single combined series per device, not two separate targets:
+          // `joinByLabels` (see "Interface inventory"'s comment) only
+          // unifies rows whose *join* labels match, and `node_type`
+          // (ftd_ha_node_info) / `status` (ftd_ha_node_status) each exist on
+          // only one of the two metrics -- including both in the join list
+          // fragments every device into two disjoint rows (one with a role
+          // and no status, one with a status and no role); excluding them
+          // from the join list instead drops them from the output entirely,
+          // for every device, not just the mismatched ones (both verified
+          // live). `group_left` pulls `status` onto the same series `role`
+          // is already a label on, before either transform runs.
+          // `on(...)` includes `job, instance` (both metrics carry them
+          // identically, so this costs nothing) rather than matching on
+          // `device_uid, device_name` alone: without them, two scrape
+          // targets reporting the same device give `group_left` two
+          // right-hand candidates for one match group, which PromQL
+          // rejects outright ("many-to-many matching not allowed") and
+          // takes the whole panel down for every device, not just the
+          // colliding one -- and even a single surviving match could
+          // attach one instance's `status` to another instance's `role`
+          // (Opus review finding).
+          expr: `(ftd_ha_node_info{${SCOPE}} == 1) * on (job, instance, device_uid, device_name) group_left(status) (ftd_ha_node_status{${SCOPE}} == 1)`,
           instant: true,
         },
       ],
       transformations: [
+        // With everything already on one series, `labelsToFields` promotes
+        // device_name/device_uid/node_type/status to columns per device,
+        // and `merge` concatenates the resulting per-device single-row
+        // frames into one table -- confirmed live to produce one row per
+        // device with both HA columns populated. (`joinByLabels` pivoting
+        // on `__name__` was tried first and doesn't apply here: the `*`
+        // binary operator above drops `__name__` per standard PromQL
+        // vector-arithmetic semantics, leaving nothing for it to pivot on.)
+        { id: 'labelsToFields', options: {} },
         { id: 'merge', options: {} },
         {
           id: 'organize',
@@ -990,8 +1059,12 @@ const row5: RowSpec = {
               Time: true,
               device_uid: true,
               __name__: true,
-              'Value #A': true,
-              'Value #B': true,
+              Value: true,
+              endpoint: true,
+              instance: true,
+              job: true,
+              namespace: true,
+              service: true,
             },
             renameByName: {
               device_name: 'Device',
@@ -1076,15 +1149,34 @@ const row6: RowSpec = {
         {
           refId: 'A',
           expr: `ftd_s2s_tunnel_state{${SCOPE},state!="up"} == 1`,
-          legendFormat: 'tunnel',
           instant: true,
         },
       ],
       transformations: [
+        // See the "Exporter build info" panel's comment: without
+        // `labelsToFields`, `tunnel_name`/`tunnel_id`/`state` are label
+        // metadata, not table fields, so `organize`'s renames below never
+        // matched anything (this panel predates that fix and was missed --
+        // it happened to render as merely-empty rather than visibly broken
+        // because the test fleet has no S2S VPN configured). `merge`
+        // concatenates the per-tunnel single-row frames `labelsToFields`
+        // produces (up to 1000 per DESIGN.md §4.2) into one table.
+        { id: 'labelsToFields', options: {} },
+        { id: 'merge', options: {} },
         {
           id: 'organize',
           options: {
-            excludeByName: { Time: true, device_uid: true, __name__: true, Value: true },
+            excludeByName: {
+              Time: true,
+              device_uid: true,
+              __name__: true,
+              ftd_s2s_tunnel_state: true,
+              endpoint: true,
+              instance: true,
+              job: true,
+              namespace: true,
+              service: true,
+            },
             renameByName: {
               device_name: 'Device',
               tunnel_name: 'Tunnel',
@@ -1434,10 +1526,27 @@ const row8: RowSpec = {
         },
       ],
       transformations: [
+        // Prometheus's instant-query response carries every label (version,
+        // commit, node_version, ...) as metadata on a single numeric-multi
+        // value field, not as separate table columns -- `organize`'s
+        // renameByName only operates on existing field names, so without
+        // `labelsToFields` promoting each label to its own field first, none
+        // of the renames below ever match anything and the panel renders
+        // "No data" (verified live: confirmed reproducing in a real,
+        // non-headless browser session, not a headless-capture artifact).
+        { id: 'labelsToFields', options: {} },
         {
           id: 'organize',
           options: {
-            excludeByName: { Time: true, __name__: true, Value: true },
+            excludeByName: {
+              Time: true,
+              __name__: true,
+              build: true,
+              ftd_exporter_build_info: true,
+              endpoint: true,
+              namespace: true,
+              service: true,
+            },
             renameByName: {
               version: 'Version',
               commit: 'Commit',
