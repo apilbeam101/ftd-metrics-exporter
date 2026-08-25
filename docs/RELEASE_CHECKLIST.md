@@ -44,7 +44,22 @@ rather than a handful of poll cycles.
       for the license/certificate metrics (added 2026-08-14, never previously
       soak-tested) and confirms the SCC HA-shared-`device_uid` behavior
       (§14.14) live on a real HA pair distinct from the one used to originally
-      find it. Will update with the full 7-day result.
+      find it.
+      **Soak clock restarted 2026-08-25 12:38 UTC**, ~3h50m into the original
+      run: redeployed the VM from the packaged `v0.3.0` release (built via
+      `npm pack` against the tag, transferred, `npm ci --omit=dev` on the VM;
+      the live `.env` was left untouched) rather than the `1878bed` working
+      clone, so the soak now runs the exact artifact that shipped —
+      including this same release's five-panel dashboard fix (§14.15) and
+      the fresh `node:26`/`node:26-slim` base layers pulled in by the
+      `release.yml` image build. Immediately post-restart: `ftd_exporter_build_info{version="0.3.0"}`,
+      `/healthz`=200, one expected cold-start-elongated poll cycle
+      (119s, same simultaneous-cache-refresh cause as the original run's),
+      then back to the ~1.8s baseline on the next two cycles, zero errors in
+      the journal. The pre-restart ~4 hours above remain valid evidence for
+      the license/certificate/HA findings; only the *duration* counter toward
+      the 7-day pass criterion restarts. Will update with the full 7-day
+      result.
 - [ ] **7-day FMC soak** (lab, 4 FTDv). Not started this session — see
       `docs/LIVE_SMOKE_TEST.md`'s note on the FMC-lab/Docker-K8s-host mutually
       exclusive network routes; this leg needs the FMC lab route specifically,
@@ -118,6 +133,15 @@ rather than a handful of poll cycles.
       or publishes something unintended).
       **v0.1.0 (2026-08-07)**: `package.json` already at `0.1.0` from Stage
       0; no bump needed for this first release.
+      **v0.3.0 (2026-08-25)**: bumped `0.2.0` → `0.3.0` (`npm version --no-git-tag-version`)
+      for the license/certificate-status feature set, SCC device-inventory
+      follow-through, and the five-panel dashboard fix — all additive to the
+      metric surface, consistent with a minor bump per §13. Also picked up
+      two open Dependabot PRs (GitHub Actions group bump, `biome` dev-dep
+      bump) merged first so the tagged commit includes them; one PR's CI run
+      hit the known-flaky `dist-smoke.test.ts` SIGINT-during-init signal test
+      (unrelated to either PR's diff — confirmed by a clean re-run before
+      merging) rather than a real regression.
 - [x] **Promote `CHANGELOG.md`'s `## [Unreleased]` section to `## [X.Y.Z]`**
       (with today's date) before tagging. `release.yml`'s `release` job
       extracts the section matching the pushed tag's version and fails if
@@ -125,6 +149,10 @@ rather than a handful of poll cycles.
       than a habit to remember.
       **v0.1.0 (2026-08-07)**: promoted; verified the extraction script
       directly against the file before pushing the tag.
+      **v0.3.0 (2026-08-25)**: promoted, and rewrote the dashboard-fix "Fixed"
+      entry to reflect the final five-panel state (the `merge`→`joinByLabels`
+      fix) rather than the superseded first-pass "switch to `merge`" wording
+      that was already in `[Unreleased]`.
 - [ ] Live verification against a real SCC tenant and/or on-prem FMC —
       follow [docs/LIVE_SMOKE_TEST.md](LIVE_SMOKE_TEST.md) and record
       results here (backend × surface × pass/fail × date).
@@ -138,6 +166,10 @@ rather than a handful of poll cycles.
       (`vars.PUBLISH_NPM`) pending `NPM_TOKEN` setup, so the `npm` job
       (and its `check-pack-allowlist.ts` step) didn't run. Revisit once npm
       publishing is enabled.
+      **v0.3.0 (2026-08-25)**: still gated off; inspected `npm pack` output
+      by eye anyway since the same tarball was used to redeploy the Stage 16
+      soak VM — 160 files, `dist/`, `example.env`, `README.md`, `LICENSE`,
+      `package.json` only, no `.env`/`data/`/`.scratch/`/fixtures.
 - [x] After the release workflow completes: pull the published image
       anonymously and run `gh attestation verify
       oci://ghcr.io/apilbeam101/ftd-metrics-exporter:<tag> -R
@@ -148,6 +180,9 @@ rather than a handful of poll cycles.
       transparency-log inclusion, and a SLSA provenance statement resolving
       to the exact tag/commit/workflow run and image digest
       (`sha256:3ae4a1ab...`).
+      **v0.3.0 (2026-08-25)**: verified — `gh attestation verify` resolved a
+      real Sigstore bundle referencing `refs/tags/v0.3.0` and the
+      `release.yml` workflow run.
 - [x] Confirm the Docker Hub mirror published the same tag (best-effort;
       mirror failures are non-fatal to the release, so this is the check
       that catches a silently-failed mirror).
@@ -156,6 +191,8 @@ rather than a handful of poll cycles.
       (`continue-on-error: true`); GHCR + npm remain the primary artifacts
       per the workflow's own design. Revisit if Docker Hub distribution is
       wanted later.
+      **v0.3.0 (2026-08-25)**: same, still no secrets configured — confirmed
+      unchanged from v0.1.0/v0.2.0, not a new failure.
 
 ## Quarterly
 
