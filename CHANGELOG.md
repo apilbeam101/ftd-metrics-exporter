@@ -6,12 +6,14 @@ All notable changes to this project are documented in this file. Format follows 
 
 ### Added
 
+- `scripts/demo-metrics-server.ts`: fabricates a full-coverage synthetic fleet through the real collector code, kept in-repo for regenerating dashboard screenshots (e.g. `dashboards/ftd-health-dashboard.png`, added alongside it).
 - Smart License status (`ftd_license_registration_info`, `ftd_license_authorization_info`, `ftd_license_eval_used`, `ftd_license_eval_expires_in_days`, `ftd_license_last_synchronized_timestamp_seconds`, `ftd_license_last_renewed_timestamp_seconds`) on **both backends**, fleet/manager-scoped — the upstream response carries no device identifier at all. `SCC_LICENSE_POLL_INTERVAL_SECONDS`/`FMC_LICENSE_POLL_INTERVAL_SECONDS` (default 3600s).
 - Certificate status (`ftd_certificate_expiry_timestamp_seconds`, `ftd_certificate_status_info`) on **both backends**, per enrolled certificate's CA/identity component. `SCC_CERTIFICATE_POLL_INTERVAL_SECONDS`/`FMC_CERTIFICATE_POLL_INTERVAL_SECONDS` (default 3600s).
 - `ftd_exporter_license_errors_total`/`ftd_exporter_certificate_errors_total` self-metrics.
 
 ### Fixed
 
+- Dashboard "Per-device summary" panel (id 12) used the `joinByField` transform across 6 instant-query targets; `joinByField` assumes one frame per target, but Prometheus's datasource returns one frame *per series* for an instant query, so any target matching more than one device collapsed the whole join to a single bogus row — reproducible on nearly every real fleet. Fixed by switching to `merge` (the transform "Current HA role" already used successfully for the same instant-query shape). `dashboards/ftd-health.json` regenerated.
 - Certificate-expiry field names/endpoint corrected before shipping, based on a live check against both backends rather than the original guess.
 - Adversarial review found and fixed 9 issues before merge: degenerate license/certificate refreshes were treated as successful instead of failures on both backends, SCC's domain-UUID lookup bypassed the shared rate-limit guard, FMC's license/certificate refresh wasn't actually protected the way a comment claimed, duplicate certificates could silently overwrite each other, timestamp parsing accepted invalid calendar dates, and a couple of smaller enum/metric-exposition edge cases.
 

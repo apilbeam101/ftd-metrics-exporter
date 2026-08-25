@@ -900,44 +900,26 @@
       "description": "The visual anchor of the dashboard (DESIGN.md §10.2): one row per device with system CPU, memory, disk, HA status/role, and named-interfaces-down count, cell-coloured by the same thresholds as the alerts. HA columns are empty for non-HA devices, which is expected rather than a fault.",
       "transformations": [
         {
-          "id": "joinByField",
-          "options": {
-            "byField": "device_name",
-            "mode": "outer"
-          }
+          "id": "merge",
+          "options": {}
         },
         {
           "id": "organize",
           "options": {
             "excludeByName": {
               "Time": true,
-              "Time 1": true,
-              "Time 2": true,
-              "Time 3": true,
-              "Time 4": true,
-              "Time 5": true,
-              "Time 6": true,
               "device_uid": true,
-              "device_uid 1": true,
-              "device_uid 2": true,
-              "device_uid 3": true,
-              "device_uid 4": true,
-              "device_uid 5": true,
-              "device_uid 6": true,
               "component": true,
-              "component 1": true,
-              "component 2": true,
               "node_type": true
             },
             "renameByName": {
               "device_name": "Device",
-              "Value #A": "CPU (system)",
-              "Value #B": "Memory (system)",
-              "Value #C": "Disk",
+              "cpu": "CPU (system)",
+              "memory": "Memory (system)",
+              "disk": "Disk",
               "status": "HA status",
-              "Value #D": "",
-              "Value #E": "",
-              "Value #F": "Named ifaces down"
+              "ha_role": "",
+              "ifaces_down": "Named ifaces down"
             }
           }
         }

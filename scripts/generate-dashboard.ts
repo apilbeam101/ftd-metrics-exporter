@@ -448,39 +448,38 @@ const row1: RowSpec = {
         },
       ],
       transformations: [
-        { id: 'joinByField', options: { byField: 'device_name', mode: 'outer' } },
+        // `joinByField` (mode: outer) assumes each target resolves to one
+        // frame per query -- true for a single-series query, false here:
+        // Prometheus's datasource returns one frame PER SERIES for an
+        // instant query, so a 5-device target already arrives as 5 frames.
+        // `joinByField` collapsed all ~19 frames from A-F down to a single
+        // row (verified live: the rendered table showed one row with only
+        // target A's first series). `merge` is built for exactly this shape
+        // -- combining many single/few-row frames into one table aligned on
+        // shared field values -- and is what "Current HA role" below
+        // already uses successfully for the same instant-query pattern.
+        { id: 'merge', options: {} },
         {
           id: 'organize',
           options: {
             excludeByName: {
               Time: true,
-              'Time 1': true,
-              'Time 2': true,
-              'Time 3': true,
-              'Time 4': true,
-              'Time 5': true,
-              'Time 6': true,
               device_uid: true,
-              'device_uid 1': true,
-              'device_uid 2': true,
-              'device_uid 3': true,
-              'device_uid 4': true,
-              'device_uid 5': true,
-              'device_uid 6': true,
               component: true,
-              'component 1': true,
-              'component 2': true,
               node_type: true,
             },
             renameByName: {
               device_name: 'Device',
-              'Value #A': 'CPU (system)',
-              'Value #B': 'Memory (system)',
-              'Value #C': 'Disk',
+              // `merge`'s output field names come from each target's
+              // legendFormat directly (no refId suffixing, unlike
+              // joinByField) -- these must match targets A/B/C/D/F's
+              // legendFormat strings above verbatim.
+              cpu: 'CPU (system)',
+              memory: 'Memory (system)',
+              disk: 'Disk',
               status: 'HA status',
-              'Value #D': '',
-              'Value #E': '',
-              'Value #F': 'Named ifaces down',
+              ha_role: '',
+              ifaces_down: 'Named ifaces down',
             },
           },
         },
