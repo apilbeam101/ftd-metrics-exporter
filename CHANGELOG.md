@@ -4,6 +4,8 @@ All notable changes to this project are documented in this file. Format follows 
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-14
+
 ### Added
 
 - Remaining SCC device-inventory fields (**SCC only**, same `GET /v1/inventory/devices` request `ftd_device_info`/`ftd_device_connectivity_up` already polls, zero extra cost): new `ftd_device_status_info` (`config_state`/`conflict_detection_state`/`license_status`/`compliance_status`); new `ftd_device_ha_role_info` (one series per HA node, `role="active|standby|unknown"`, `node_type="primary|secondary"` — the join key back to `ftd_ha_node_info` — keyed by `node_name` since HA peers share both `device_uid` and `device_name` on this endpoint). See [DESIGN.md §4.6.3](docs/DESIGN.md#463-remaining-device-inventory-fields-scc-only).
