@@ -44,6 +44,37 @@ export const KNOWN_INTERFACE_TYPE_VALUES: readonly string[] = [
 export type RedundancyMode = 'STANDALONE' | 'HA';
 export const REDUNDANCY_MODE_VALUES: readonly RedundancyMode[] = ['STANDALONE', 'HA'];
 
+/**
+ * SCC device-inventory `configState` (DESIGN.md §4.6.3), confirmed live
+ * 2026-09-14: `SYNCED` and `NOT_SYNCED`. Bounded state descriptor, same
+ * fallback-to-"unknown" treatment as `redundancy_mode`.
+ */
+export type ConfigState = 'SYNCED' | 'NOT_SYNCED';
+export const CONFIG_STATE_VALUES: readonly ConfigState[] = ['SYNCED', 'NOT_SYNCED'];
+
+/** SCC device-inventory `conflictDetectionState` (DESIGN.md §4.6.3). Only `NO_CONFLICTS` confirmed live so far; a real conflict state is undocumented but presumed to exist. */
+export type ConflictDetectionState = 'NO_CONFLICTS';
+export const CONFLICT_DETECTION_STATE_VALUES: readonly ConflictDetectionState[] = ['NO_CONFLICTS'];
+
+/** SCC device-inventory per-device `licenseStatus` (DESIGN.md §4.6.3). Distinct from the fleet-scoped `LicenseRegStatus`/`LicenseAuthStatus` (§4.6.2). Only `LICENSED` confirmed live so far. */
+export type DeviceLicenseStatus = 'LICENSED';
+export const DEVICE_LICENSE_STATUS_VALUES: readonly DeviceLicenseStatus[] = ['LICENSED'];
+
+/** SCC device-inventory `complianceStatus` (DESIGN.md §4.6.3). Only `IN_COMPLIANCE` confirmed live so far. */
+export type DeviceComplianceStatus = 'IN_COMPLIANCE';
+export const DEVICE_COMPLIANCE_STATUS_VALUES: readonly DeviceComplianceStatus[] = ['IN_COMPLIANCE'];
+
+/**
+ * SCC device-inventory `ftdHaInfo.{primaryNode,secondaryNode}.role`
+ * (DESIGN.md §4.6.3), confirmed live 2026-09-14 on a real HA pair: `ACTIVE`
+ * on the currently-active node, `STANDBY` on the other. Distinct from
+ * `HaNodeType` (`PRIMARY`/`SECONDARY`, a static config assignment already
+ * exposed via `/health/metrics`'s `haHealthMetrics.nodeType`) — `role` is
+ * the dynamic active/standby state that flips on failover.
+ */
+export type HaRole = 'ACTIVE' | 'STANDBY';
+export const HA_ROLE_VALUES: readonly HaRole[] = ['ACTIVE', 'STANDBY'];
+
 export const HA_NODE_STATUS_VALUES: readonly HaNodeStatus[] = [
   'NORMAL',
   'ERROR',

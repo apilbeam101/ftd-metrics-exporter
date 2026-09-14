@@ -80,7 +80,7 @@ ftd_interface_operational_up{device_uid="00000000-0000-4000-8000-000000000001",d
 # HELP ftd_ha_node_status State set: exactly one status label is 1 for a given device.
 # TYPE ftd_ha_node_status gauge
 
-# HELP ftd_ha_node_info Always 1. Informational; node_type carries the HA role.
+# HELP ftd_ha_node_info Always 1. Informational; node_type carries the static primary/secondary config assignment (not the dynamic active/standby state — see ftd_device_ha_role_info, SCC only).
 # TYPE ftd_ha_node_info gauge
 
 # HELP ftd_ravpn_sessions_active_avg Average active RA VPN session count over the sample window.

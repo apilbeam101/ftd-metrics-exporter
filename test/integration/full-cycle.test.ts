@@ -176,7 +176,7 @@ test('SCC: device inventory (ftd_device_info / ftd_device_connectivity_up) reach
     // Present despite health/metrics reporting zero devices.
     assert.match(
       res.body,
-      /ftd_device_info\{device_uid="u1",device_name="ftd-online",redundancy_mode="standalone"\} 1/,
+      /ftd_device_info\{device_uid="u1",device_name="ftd-online",redundancy_mode="standalone",software_version="",serial="",performance_tier=""\} 1/,
     );
     assert.match(
       res.body,
@@ -197,8 +197,8 @@ test('SCC: device inventory (ftd_device_info / ftd_device_connectivity_up) reach
     // would have read 0 despite 4 ftd_device_* series being on the page).
     assert.match(
       res.body,
-      /ftd_exporter_series 4/,
-      '2x ftd_device_info + 2x ftd_device_connectivity_up (Meraki excluded, health snapshot empty)',
+      /ftd_exporter_series 6/,
+      '2x ftd_device_info + 2x ftd_device_connectivity_up + 2x ftd_device_status_info (Meraki excluded, health snapshot empty, neither device is HA so ftd_device_ha_role_info contributes 0)',
     );
   } finally {
     await app.stop();

@@ -80,7 +80,7 @@ Every variable is documented in full detail — including how to obtain each cre
 | `SCC_API_TOKEN` | Static bearer token from a dedicated, read-only, API-only SCC user. Shown once at creation — copy it immediately. |
 | `SCC_FMC_UID` | UID of the cloud-delivered FMC (cdFMC) whose devices you want polled. From the SCC inventory UI or `GET /v1/inventory/managers`. |
 
-Optional for SCC: `SCC_TIME_RANGE` (averaging window, defaults to `5m`), `SCC_INVENTORY_POLL_INTERVAL_SECONDS` (device-inventory poll cadence for `ftd_device_info`/`ftd_device_connectivity_up`, defaults to `300`), `SCC_LICENSE_POLL_INTERVAL_SECONDS`/`SCC_CERTIFICATE_POLL_INTERVAL_SECONDS` (Smart License/certificate status poll cadence for `ftd_license_*`/`ftd_certificate_*`, each defaults to `3600`).
+Optional for SCC: `SCC_TIME_RANGE` (averaging window, defaults to `5m`), `SCC_INVENTORY_POLL_INTERVAL_SECONDS` (device-inventory poll cadence for `ftd_device_info`/`ftd_device_connectivity_up`/`ftd_device_status_info`/`ftd_device_ha_role_info`, defaults to `300`), `SCC_LICENSE_POLL_INTERVAL_SECONDS`/`SCC_CERTIFICATE_POLL_INTERVAL_SECONDS` (Smart License/certificate status poll cadence for `ftd_license_*`/`ftd_certificate_*`, each defaults to `3600`).
 
 ### Required — standalone FMC (`BACKEND_TYPE=fmc`)
 
@@ -131,7 +131,7 @@ Every device metric is emitted per-device (`device_uid`, `device_name` labels), 
 | High availability | HA role (`ftd_ha_node_info`), HA node status | Only if HA-configured |
 | Remote-access VPN | active/inactive/peak-concurrent session counts | Only if RA VPN-configured |
 | Site-to-site VPN | per-tunnel state | Only if S2S tunnels exist |
-| Device inventory (`ftd_device_*`, SCC only) | `ftd_device_info`, `ftd_device_connectivity_up` — catches a fully `UNREACHABLE` device that vanishes from every other series | On its own poll cadence, independent of the health poll |
+| Device inventory (`ftd_device_*`, SCC only) | `ftd_device_info` (identity + software version/serial/performance tier), `ftd_device_connectivity_up` — catches a fully `UNREACHABLE` device that vanishes from every other series, `ftd_device_status_info` (config sync/conflict/license/compliance state), `ftd_device_ha_role_info` (per-node active/standby role, HA pairs only) | On its own poll cadence, independent of the health poll — an HA failover's `ftd_device_ha_role_info` can lag up to one cadence behind real device state |
 | Smart License status (`ftd_license_*`, both backends) | registration/authorization state, eval usage/days-remaining, last sync/renewal | Fleet/manager-scoped — no `device_uid`/`device_name` labels |
 | Certificate status (`ftd_certificate_*`, both backends) | per-device, per-enrolled-certificate CA/identity expiry and status | Only for a component that actually exists (e.g. self-signed certs have no CA component) |
 | Exporter self-metrics (`ftd_exporter_*`) | `up`, `cache_age_seconds`, `poll_errors_total`, token refresh/reauth counts (FMC) | Yes |

@@ -40,7 +40,7 @@
     },
     {
       "uid": "00000000-0000-4000-8000-000000000010",
-      "name": "ftd-ha-primary",
+      "name": "ftd-ha-pair",
       "deviceType": "CDFMC_MANAGED_FTD",
       "connectorType": "CDG",
       "address": "00000000-0000-4000-8000-000000000025DONTRESOLVE:443",

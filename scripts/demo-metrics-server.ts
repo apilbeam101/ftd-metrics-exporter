@@ -167,7 +167,7 @@ function buildSnapshots(): DeviceHealthSnapshot[] {
     },
     {
       deviceUid: '10000000-0000-4000-8000-000000000003',
-      deviceName: 'ftd-dc-ha-primary',
+      deviceName: 'ftd-dc-ha-pair',
       windowStart,
       windowEnd: now,
       cpu: { lina: wiggle(24, 3, 95), system: wiggle(29, 3, 95) },
@@ -246,24 +246,61 @@ function buildInventory(): DeviceInventoryEntry[] {
       deviceName: 'ftd-hq-edge-01',
       connectivityState: 'ONLINE',
       redundancyMode: 'STANDALONE',
+      softwareVersion: '7.4.1',
+      serial: 'JAD24001ABC',
+      ftdPerformanceTier: 'FTDv20',
+      configState: 'SYNCED',
+      conflictDetectionState: 'NO_CONFLICTS',
+      licenseStatus: 'LICENSED',
+      complianceStatus: 'IN_COMPLIANCE',
     },
     {
       deviceUid: '10000000-0000-4000-8000-000000000002',
       deviceName: 'ftd-hq-edge-02',
       connectivityState: 'ONLINE',
       redundancyMode: 'STANDALONE',
+      softwareVersion: '7.4.1',
+      serial: 'JAD24001ABD',
+      ftdPerformanceTier: 'FTDv20',
+      // Deliberately not-nominal, exercising the same "unknown" fallback +
+      // diagnostic path a real fleet mid-deploy would hit (§4.6.3).
+      configState: 'NOT_SYNCED',
+      conflictDetectionState: 'NO_CONFLICTS',
+      licenseStatus: 'LICENSED',
+      complianceStatus: 'IN_COMPLIANCE',
     },
     {
       deviceUid: '10000000-0000-4000-8000-000000000003',
-      deviceName: 'ftd-dc-ha-primary',
+      deviceName: 'ftd-dc-ha-pair',
       connectivityState: 'ONLINE',
       redundancyMode: 'HA',
+      softwareVersion: '7.4.1',
+      serial: 'JAD24001ABE',
+      ftdPerformanceTier: 'FTDv50',
+      configState: 'SYNCED',
+      conflictDetectionState: 'NO_CONFLICTS',
+      licenseStatus: 'LICENSED',
+      complianceStatus: 'IN_COMPLIANCE',
+      // Node names deliberately distinct from the pair's own deviceName
+      // above (§14.14/§4.6.3) -- ftd_device_ha_role_info's node_name is the
+      // per-node identifier, not the pair's.
+      haNodes: [
+        { nodeName: 'ftd-dc-ha-node-a', nodeType: 'PRIMARY', role: 'ACTIVE' },
+        { nodeName: 'ftd-dc-ha-node-b', nodeType: 'SECONDARY', role: 'STANDBY' },
+      ],
     },
     {
       deviceUid: '10000000-0000-4000-8000-000000000005',
       deviceName: 'ftd-branch-05',
       connectivityState: 'ONLINE',
       redundancyMode: 'STANDALONE',
+      softwareVersion: '7.2.8',
+      serial: 'JAD24001ABF',
+      ftdPerformanceTier: 'FTDv10',
+      configState: 'SYNCED',
+      conflictDetectionState: 'NO_CONFLICTS',
+      licenseStatus: 'LICENSED',
+      complianceStatus: 'IN_COMPLIANCE',
     },
     {
       // Absent from every ftd_* health series entirely -- the exact gap
@@ -272,6 +309,13 @@ function buildInventory(): DeviceInventoryEntry[] {
       deviceName: 'ftd-branch-06',
       connectivityState: 'UNREACHABLE',
       redundancyMode: 'STANDALONE',
+      softwareVersion: '7.2.8',
+      serial: 'JAD24001ABG',
+      ftdPerformanceTier: 'FTDv10',
+      configState: 'SYNCED',
+      conflictDetectionState: 'NO_CONFLICTS',
+      licenseStatus: 'LICENSED',
+      complianceStatus: 'IN_COMPLIANCE',
     },
   ];
 }
@@ -316,7 +360,7 @@ function buildCertificates(): DeviceCertificateEntry[] {
     },
     {
       deviceUid: '10000000-0000-4000-8000-000000000003',
-      deviceName: 'ftd-dc-ha-primary',
+      deviceName: 'ftd-dc-ha-pair',
       certName: 'ftd-dc-ha-identity',
       certType: 'identity',
       status: 'AVAILABLE',

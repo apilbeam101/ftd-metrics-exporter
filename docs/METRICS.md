@@ -20,7 +20,7 @@ never as zero, never as `NaN`.
 | `ftd_chassis_psu_output_up` | gauge | device_uid, device_name, psu | 1 if the PSU output status is up, 0 if down. Omitted when unrecognized. |
 | `ftd_cpu_usage_ratio` | gauge | device_uid, device_name, component | Average CPU utilization over the sample window, 0-1. |
 | `ftd_disk_usage_ratio` | gauge | device_uid, device_name | Average disk utilization over the sample window, 0-1. |
-| `ftd_ha_node_info` | gauge | device_uid, device_name, node_type | Always 1. Informational; node_type carries the HA role. |
+| `ftd_ha_node_info` | gauge | device_uid, device_name, node_type | Always 1. Informational; node_type carries the static primary/secondary config assignment (not the dynamic active/standby state — see ftd_device_ha_role_info, SCC only). |
 | `ftd_ha_node_status` | gauge | device_uid, device_name, status | State set: exactly one status label is 1 for a given device. |
 | `ftd_health_window_end_timestamp_seconds` | gauge | device_uid, device_name | End of the averaging window this snapshot describes, unix seconds. |
 | `ftd_health_window_start_timestamp_seconds` | gauge | device_uid, device_name | Start of the averaging window this snapshot describes, unix seconds. |
@@ -53,7 +53,9 @@ which has no equivalent inventory endpoint wired up.
 | Metric | Type | Labels | Description |
 |---|---|---|---|
 | `ftd_device_connectivity_up` | gauge | device_uid, device_name | 1 if SCC device inventory reports the device ONLINE, 0 if UNREACHABLE. Independent of the health-metrics poll — populated even for a device absent from every other ftd_* series. Omitted when connectivity state is absent or unrecognized. |
-| `ftd_device_info` | gauge | device_uid, device_name, redundancy_mode | Always 1. Informational; from SCC device inventory. redundancy_mode carries standalone/ha (lowercased), or unknown. |
+| `ftd_device_ha_role_info` | gauge | device_uid, device_name, node_name, node_type, role | Always 1. Informational; from SCC device inventory, one series per HA node. role carries active/standby (lowercased), or unknown. Only present for devices in an HA pair. node_name distinguishes the two peer nodes, which otherwise share device_uid and device_name (DESIGN.md §14.14). node_type carries primary/secondary (lowercased) - the same vocabulary ftd_ha_node_info uses for its own node_type label, so the two can be joined on (device_uid, node_type) to relate a node role to its other health-metrics series. |
+| `ftd_device_info` | gauge | device_uid, device_name, redundancy_mode, software_version, serial, performance_tier | Always 1. Informational; from SCC device inventory. redundancy_mode carries standalone/ha (lowercased), or unknown. software_version/serial/performance_tier are raw upstream passthrough values, empty string if absent. |
+| `ftd_device_status_info` | gauge | device_uid, device_name, config_state, conflict_detection_state, license_status, compliance_status | Always 1. Informational; from SCC device inventory. config_state/conflict_detection_state/license_status/compliance_status carry the lowercased upstream state, or unknown if absent or unrecognized. |
 
 ## Smart License status metrics (`ftd_license_*`, both backends)
 

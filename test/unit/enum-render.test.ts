@@ -3,7 +3,12 @@ import { test } from 'node:test';
 import {
   classifyBinaryEnum,
   classifyCertificateStatus,
+  classifyConfigState,
+  classifyConflictDetectionState,
+  classifyDeviceComplianceStatus,
+  classifyDeviceLicenseStatus,
   classifyHaNodeStatus,
+  classifyHaRole,
   classifyInterfaceType,
   classifyLicenseAuthStatus,
   classifyLicenseRegStatus,
@@ -100,5 +105,47 @@ test('classifyCertificateStatus: AVAILABLE lowercases with no unrecognized flag;
   assert.deepEqual(classifyCertificateStatus('SOMETHING_NEW'), {
     label: 'unknown',
     unrecognizedRawValue: 'SOMETHING_NEW',
+  });
+});
+
+test('classifyConfigState: SYNCED/NOT_SYNCED lowercase with no unrecognized flag; a novel value falls back to "unknown"', () => {
+  assert.deepEqual(classifyConfigState('SYNCED'), { label: 'synced' });
+  assert.deepEqual(classifyConfigState('NOT_SYNCED'), { label: 'not_synced' });
+  assert.deepEqual(classifyConfigState('SYNCING'), {
+    label: 'unknown',
+    unrecognizedRawValue: 'SYNCING',
+  });
+});
+
+test('classifyConflictDetectionState: NO_CONFLICTS lowercases with no unrecognized flag; a novel value falls back to "unknown"', () => {
+  assert.deepEqual(classifyConflictDetectionState('NO_CONFLICTS'), { label: 'no_conflicts' });
+  assert.deepEqual(classifyConflictDetectionState('CONFLICTS_DETECTED'), {
+    label: 'unknown',
+    unrecognizedRawValue: 'CONFLICTS_DETECTED',
+  });
+});
+
+test('classifyDeviceLicenseStatus: LICENSED lowercases with no unrecognized flag; a novel value falls back to "unknown"', () => {
+  assert.deepEqual(classifyDeviceLicenseStatus('LICENSED'), { label: 'licensed' });
+  assert.deepEqual(classifyDeviceLicenseStatus('UNLICENSED'), {
+    label: 'unknown',
+    unrecognizedRawValue: 'UNLICENSED',
+  });
+});
+
+test('classifyDeviceComplianceStatus: IN_COMPLIANCE lowercases with no unrecognized flag; a novel value falls back to "unknown"', () => {
+  assert.deepEqual(classifyDeviceComplianceStatus('IN_COMPLIANCE'), { label: 'in_compliance' });
+  assert.deepEqual(classifyDeviceComplianceStatus('OUT_OF_COMPLIANCE'), {
+    label: 'unknown',
+    unrecognizedRawValue: 'OUT_OF_COMPLIANCE',
+  });
+});
+
+test('classifyHaRole: ACTIVE/STANDBY lowercase with no unrecognized flag; a novel value falls back to "unknown"', () => {
+  assert.deepEqual(classifyHaRole('ACTIVE'), { label: 'active' });
+  assert.deepEqual(classifyHaRole('STANDBY'), { label: 'standby' });
+  assert.deepEqual(classifyHaRole('FAILED'), {
+    label: 'unknown',
+    unrecognizedRawValue: 'FAILED',
   });
 });

@@ -204,7 +204,7 @@ export function createDeviceMetrics(registry: Registry): DeviceMetrics {
     }),
     haNodeInfo: new Gauge({
       name: 'ftd_ha_node_info',
-      help: 'Always 1. Informational; node_type carries the HA role.',
+      help: 'Always 1. Informational; node_type carries the static primary/secondary config assignment (not the dynamic active/standby state — see ftd_device_ha_role_info, SCC only).',
       labelNames: HA_INFO_LABELS,
       registers,
     }),

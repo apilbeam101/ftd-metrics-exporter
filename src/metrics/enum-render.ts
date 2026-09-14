@@ -1,7 +1,12 @@
 import {
   CERTIFICATE_STATUS_VALUES,
+  CONFIG_STATE_VALUES,
+  CONFLICT_DETECTION_STATE_VALUES,
+  DEVICE_COMPLIANCE_STATUS_VALUES,
+  DEVICE_LICENSE_STATUS_VALUES,
   HA_NODE_STATUS_VALUES,
   HA_NODE_TYPE_VALUES,
+  HA_ROLE_VALUES,
   KNOWN_INTERFACE_TYPE_VALUES,
   LICENSE_AUTH_STATUS_VALUES,
   LICENSE_REG_STATUS_VALUES,
@@ -156,6 +161,46 @@ export function classifyLicenseAuthStatus(raw: string): InfoEnumResult {
 /** Info-label classification for `ftd_certificate_status_info`'s `status` (DESIGN.md §4.6.2) — same pattern as `classifyHaNodeType`. `NOT_APPLICABLE` never reaches here (see `CertificateStatus`'s doc comment). */
 export function classifyCertificateStatus(raw: string): InfoEnumResult {
   if ((CERTIFICATE_STATUS_VALUES as readonly string[]).includes(raw)) {
+    return { label: lowercaseEnumLabel(raw) };
+  }
+  return { label: 'unknown', unrecognizedRawValue: raw };
+}
+
+/** Info-label classification for `ftd_device_status_info`'s `config_state` (DESIGN.md §4.6.3) — same pattern as `classifyHaNodeType`. */
+export function classifyConfigState(raw: string): InfoEnumResult {
+  if ((CONFIG_STATE_VALUES as readonly string[]).includes(raw)) {
+    return { label: lowercaseEnumLabel(raw) };
+  }
+  return { label: 'unknown', unrecognizedRawValue: raw };
+}
+
+/** Info-label classification for `ftd_device_status_info`'s `conflict_detection_state` (DESIGN.md §4.6.3) — same pattern as `classifyHaNodeType`. */
+export function classifyConflictDetectionState(raw: string): InfoEnumResult {
+  if ((CONFLICT_DETECTION_STATE_VALUES as readonly string[]).includes(raw)) {
+    return { label: lowercaseEnumLabel(raw) };
+  }
+  return { label: 'unknown', unrecognizedRawValue: raw };
+}
+
+/** Info-label classification for `ftd_device_status_info`'s `license_status` (DESIGN.md §4.6.3) — per-device, distinct from `classifyLicenseRegStatus`/`classifyLicenseAuthStatus`'s fleet-scoped Smart License status. */
+export function classifyDeviceLicenseStatus(raw: string): InfoEnumResult {
+  if ((DEVICE_LICENSE_STATUS_VALUES as readonly string[]).includes(raw)) {
+    return { label: lowercaseEnumLabel(raw) };
+  }
+  return { label: 'unknown', unrecognizedRawValue: raw };
+}
+
+/** Info-label classification for `ftd_device_status_info`'s `compliance_status` (DESIGN.md §4.6.3) — same pattern as `classifyHaNodeType`. */
+export function classifyDeviceComplianceStatus(raw: string): InfoEnumResult {
+  if ((DEVICE_COMPLIANCE_STATUS_VALUES as readonly string[]).includes(raw)) {
+    return { label: lowercaseEnumLabel(raw) };
+  }
+  return { label: 'unknown', unrecognizedRawValue: raw };
+}
+
+/** Info-label classification for `ftd_device_ha_role_info`'s `role` (DESIGN.md §4.6.3) — same pattern as `classifyHaNodeType`. */
+export function classifyHaRole(raw: string): InfoEnumResult {
+  if ((HA_ROLE_VALUES as readonly string[]).includes(raw)) {
     return { label: lowercaseEnumLabel(raw) };
   }
   return { label: 'unknown', unrecognizedRawValue: raw };

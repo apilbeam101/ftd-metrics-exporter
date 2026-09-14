@@ -173,6 +173,42 @@ test('scc/inventory.json matches the expected SccInventoryResponse shape (GET /v
 
   const meraki = response.items.find((item) => item.deviceType === 'MERAKI_MX');
   assert.ok(meraki, 'expected the non-FTD MERAKI_MX entry to still be present in the raw fixture');
+
+  // DESIGN.md §4.6.3's "remaining fields" — review finding: these eight
+  // fields had no fixture-shape guard at all, only hand-written mapper
+  // inputs, the exact gap that let uid-vs-deviceUid ship wrong once already.
+  for (const device of ftds) {
+    assert.equal(typeof device.serial, 'string');
+    assert.equal(typeof device.softwareVersion, 'string');
+    assert.ok(
+      device.configState === 'SYNCED' || device.configState === 'NOT_SYNCED',
+      `unexpected configState: ${device.configState}`,
+    );
+    assert.equal(device.conflictDetectionState, 'NO_CONFLICTS');
+    assert.equal(device.licenseStatus, 'LICENSED');
+    assert.equal(device.complianceStatus, 'IN_COMPLIANCE');
+  }
+  assert.equal(typeof haDevice?.ftdPerformanceTier, 'string');
+
+  // §14.14/§4.6.3's central claim: the pair's top-level `name` is shared by
+  // both nodes -- distinct from either node's own `name` (the wire's own
+  // `ftdHaInfo.haPairName`, not modeled in `SccInventoryHaInfo` since it's
+  // out of this feature's scope, also equals the top-level name). If this
+  // regresses, the fixture no longer models the real relationship
+  // `ftd_device_ha_role_info`'s `node_name` label depends on.
+  const haInfo = haDevice?.ftdHaInfo;
+  assert.ok(haInfo, 'expected the HA device to carry ftdHaInfo');
+  const primaryName = haInfo.primaryNode?.name;
+  const secondaryName = haInfo.secondaryNode?.name;
+  assert.equal(typeof primaryName, 'string');
+  assert.equal(typeof secondaryName, 'string');
+  assert.notEqual(primaryName, haDevice?.name);
+  assert.notEqual(secondaryName, haDevice?.name);
+  assert.notEqual(primaryName, secondaryName);
+  assert.ok(
+    haInfo.primaryNode?.role === 'ACTIVE' || haInfo.primaryNode?.role === 'STANDBY',
+    `unexpected primaryNode.role: ${haInfo.primaryNode?.role}`,
+  );
 });
 
 test('scc/s2s-1000-tunnels.json has exactly 1000 unique tunnel entries', () => {
