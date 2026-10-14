@@ -4,6 +4,8 @@ All notable changes to this project are documented in this file. Format follows 
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-10-14
+
 ### Changed
 
 - Dependency refresh within existing ranges: `@biomejs/biome` 2.5.15, `@types/node` 26.6.5, `undici` 8.12.1 (includes the fix for the WebSocket `permessage-deflate` denial-of-service advisory GHSA-3wwx-pv8p-q78v).
@@ -83,7 +85,9 @@ Pre-1.0 (`0.x`) — see [docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md) f
 
 - Chassis, HA, and RA VPN/S2S VPN metric groups on both backends — field names may change in a minor release until validated against real hardware/configurations.
 
-[Unreleased]: https://github.com/apilbeam101/ftd-metrics-exporter/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/apilbeam101/ftd-metrics-exporter/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/apilbeam101/ftd-metrics-exporter/compare/v0.4.0...v0.4.1
+[0.4.0]: https://github.com/apilbeam101/ftd-metrics-exporter/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/apilbeam101/ftd-metrics-exporter/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/apilbeam101/ftd-metrics-exporter/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/apilbeam101/ftd-metrics-exporter/releases/tag/v0.1.0
