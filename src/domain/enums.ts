@@ -87,10 +87,6 @@ export const HA_NODE_TYPE_VALUES: readonly HaNodeType[] = ['PRIMARY', 'SECONDARY
 
 export const TUNNEL_STATE_VALUES: readonly TunnelState[] = ['TUNNEL_UP', 'TUNNEL_DOWN', 'UNKNOWN'];
 
-export const LINK_STATUS_VALUES: readonly LinkStatus[] = ['UP', 'DOWN'];
-export const OPERATIONAL_STATUS_VALUES: readonly OperationalStatus[] = ['UP', 'DOWN'];
-export const PSU_STATUS_VALUES: readonly PsuStatus[] = ['UP', 'DOWN'];
-
 /**
  * Smart License registration/authorization vocabularies (DESIGN.md §4.6.2),
  * taken from Cisco's `fmc_swagger.json` `getSmartLicense` example and

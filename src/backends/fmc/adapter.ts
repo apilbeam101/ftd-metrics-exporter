@@ -662,5 +662,3 @@ export function createFmcAdapter(
     },
   };
 }
-
-export type { AgentOptions };

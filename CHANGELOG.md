@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file. Format follows 
 
 ## [Unreleased]
 
+### Changed
+
+- Dependency refresh within existing ranges: `@biomejs/biome` 2.5.15, `@types/node` 26.6.5, `undici` 8.12.1 (includes the fix for the WebSocket `permessage-deflate` denial-of-service advisory GHSA-3wwx-pv8p-q78v).
+- CI: the DCO sign-off check now exempts commits authored by Dependabot.
+- Internal cleanup of unused exports; no change to the metric surface, labels, or environment variables.
+
 ## [0.4.0] - 2026-09-14
 
 ### Added

@@ -617,5 +617,3 @@ export function createSccAdapter(options: CreateSccAdapterOptions): SccHealthBac
     },
   };
 }
-
-export type { AgentOptions };

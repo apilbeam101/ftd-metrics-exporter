@@ -1,14 +1,5 @@
 import type { Secret } from './secret.ts';
 
-/**
- * Discriminated union on `kind` (DESIGN.md §2.3, plan Stage 4 scope): once a
- * caller has checked `config.backend.kind === 'fmc'`, every FMC-only field
- * (host, username, password, ...) is statically non-optional — "required
- * for the selected backend" becomes a compile-time property of the adapter
- * code, not a runtime hope.
- */
-export type BackendType = 'scc' | 'fmc';
-
 export type TimeRange = '5m' | '15m' | '30m' | '1h';
 export const TIME_RANGE_VALUES: readonly TimeRange[] = ['5m', '15m', '30m', '1h'];
 
@@ -64,6 +55,13 @@ export interface FmcBackendConfig {
   certificatePollIntervalSeconds: number;
 }
 
+/**
+ * Discriminated union on `kind` (DESIGN.md §2.3, plan Stage 4 scope): once a
+ * caller has checked `config.backend.kind === 'fmc'`, every FMC-only field
+ * (host, username, password, ...) is statically non-optional — "required
+ * for the selected backend" becomes a compile-time property of the adapter
+ * code, not a runtime hope.
+ */
 export type BackendConfig = SccBackendConfig | FmcBackendConfig;
 
 export interface MetricsTlsConfig {
