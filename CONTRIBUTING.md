@@ -82,7 +82,7 @@ This project uses the [Developer Certificate of Origin](https://developercertifi
 git commit -s -m "your message"
 ```
 
-This adds a `Signed-off-by: Your Name <your.email@example.com>` trailer. PRs with unsigned commits will be asked to amend before merge.
+This adds a `Signed-off-by: Your Name <your.email@example.com>` trailer. PRs with unsigned commits will be asked to amend before merge. Commits authored by Dependabot are exempt, since the bot cannot sign off; any human commit added to a Dependabot branch still needs one.
 
 ## What NOT to do
 
