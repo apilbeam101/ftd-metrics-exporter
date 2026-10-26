@@ -138,7 +138,7 @@ test('.dockerignore: a sentinel value in a local .env never reaches any built im
  * verifying this test fails against it (leaked src/, tsconfig.json, and a
  * planted credential file).
  */
-test('shipped runtime image contains only dist/ and package manifests under /app -- no source, no stray files', {
+test('shipped runtime image contains only dist/ and package manifests under /app -- no source, no stray files, no package manager', {
   skip: dockerAvailable()
     ? false
     : 'docker is not available, or is not configured for Linux containers, in this environment',
@@ -176,4 +176,19 @@ test('shipped runtime image contains only dist/ and package manifests under /app
     ['dist', 'node_modules', 'package-lock.json', 'package.json'],
     `expected /app to contain only dist/, node_modules/, and the package manifests; got: ${listing.join(', ')}`,
   );
+
+  const runShell = (script: string): string =>
+    execFileSync('docker', ['run', '--rm', '--entrypoint', '/bin/sh', imageTag, '-c', script])
+      .toString('utf8')
+      .trim();
+
+  // npm's bundled dependency tree carries its own CVEs; nothing at runtime needs a package manager.
+  assert.equal(
+    runShell(
+      'for b in npm npx corepack yarn yarnpkg; do command -v "$b"; done; ls -A /usr/local/lib/node_modules 2>/dev/null; true',
+    ),
+    '',
+    'expected no package manager (npm/npx/corepack/yarn) and no global node_modules in the runtime image',
+  );
+  assert.match(runShell('node --version'), /^v\d+\.\d+\.\d+$/);
 });

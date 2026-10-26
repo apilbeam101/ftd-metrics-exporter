@@ -30,7 +30,14 @@ LABEL org.opencontainers.image.source="https://github.com/apilbeam101/ftd-metric
       org.opencontainers.image.description="Prometheus exporter for Cisco FTD firewall health metrics (SCC/cdFMC and standalone on-prem FMC backends)"
 
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev && npm cache clean --force
+# The base image's package managers are needed only for this install, never
+# at runtime -- and npm's own bundled dependency tree carries CVEs of its own
+# that otherwise ship in every image (Trivy, 2026-10-26: 13 fixable findings
+# under /usr/local/lib/node_modules/npm alone).
+RUN npm ci --omit=dev && npm cache clean --force \
+    && rm -rf /usr/local/lib/node_modules /root/.npm /opt/yarn-v* \
+    && rm -f /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack \
+        /usr/local/bin/yarn /usr/local/bin/yarnpkg
 COPY --from=builder /app/dist ./dist
 
 # Fixed non-zero UID/GID (not the image's default `node` user) so it's
