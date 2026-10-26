@@ -4,6 +4,8 @@ All notable changes to this project are documented in this file. Format follows 
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-10-26
+
 ### Security
 
 - `undici` 8.12.3 (from 8.12.1, which `0.4.2` shipped): fixes GHSA-4qv8-2p9j-2685 (EventSource parser unbounded memory), GHSA-f72v-6w45-q472 (SRI bypass), and GHSA-xjj6-f33q-929c (unhandled error on excessive content-encodings).
@@ -105,7 +107,8 @@ Pre-1.0 (`0.x`) — see [docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md) f
 
 - Chassis, HA, and RA VPN/S2S VPN metric groups on both backends — field names may change in a minor release until validated against real hardware/configurations.
 
-[Unreleased]: https://github.com/apilbeam101/ftd-metrics-exporter/compare/v0.4.2...HEAD
+[Unreleased]: https://github.com/apilbeam101/ftd-metrics-exporter/compare/v0.4.3...HEAD
+[0.4.3]: https://github.com/apilbeam101/ftd-metrics-exporter/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/apilbeam101/ftd-metrics-exporter/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/apilbeam101/ftd-metrics-exporter/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/apilbeam101/ftd-metrics-exporter/compare/v0.3.0...v0.4.0
