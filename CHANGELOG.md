@@ -4,6 +4,14 @@ All notable changes to this project are documented in this file. Format follows 
 
 ## [Unreleased]
 
+### Security
+
+- Published image rebuilt on Node.js 26.12.1 (the 2026-10-21 Node security release: Brotli decoder out-of-bounds write CVE-2026-111497, plus TLS hostname-verification fixes CVE-2026-105483/-106069/-106072). The `0.4.1` image shipped Node 26.11.1. No application code change. Standalone installs should run Node.js 24.22.1+ or 26.12.1+.
+
+### Changed
+
+- CI: single-version jobs (lint, unit, audit, release verify, etc.) now run on Node 26, matching the published image's runtime. The OS matrix still covers Node 24 and current.
+
 ## [0.4.1] - 2026-10-14
 
 ### Changed
