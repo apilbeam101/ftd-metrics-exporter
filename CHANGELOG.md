@@ -4,6 +4,8 @@ All notable changes to this project are documented in this file. Format follows 
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-10-26
+
 ### Security
 
 - Published image rebuilt on Node.js 26.12.1 (the 2026-10-21 Node security release: Brotli decoder out-of-bounds write CVE-2026-111497, plus TLS hostname-verification fixes CVE-2026-105483/-106069/-106072). The `0.4.1` image shipped Node 26.11.1. No application code change. Standalone installs should run Node.js 24.22.1+ or 26.12.1+.
@@ -93,7 +95,8 @@ Pre-1.0 (`0.x`) — see [docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md) f
 
 - Chassis, HA, and RA VPN/S2S VPN metric groups on both backends — field names may change in a minor release until validated against real hardware/configurations.
 
-[Unreleased]: https://github.com/apilbeam101/ftd-metrics-exporter/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/apilbeam101/ftd-metrics-exporter/compare/v0.4.2...HEAD
+[0.4.2]: https://github.com/apilbeam101/ftd-metrics-exporter/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/apilbeam101/ftd-metrics-exporter/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/apilbeam101/ftd-metrics-exporter/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/apilbeam101/ftd-metrics-exporter/compare/v0.2.0...v0.3.0
