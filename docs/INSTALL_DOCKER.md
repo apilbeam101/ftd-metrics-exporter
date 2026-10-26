@@ -18,7 +18,7 @@ Building from source instead of pulling (contributors, air-gapped environments):
 docker build -t ftd-metrics-exporter .
 ```
 
-Multi-stage: a `node:26` builder compiles TypeScript, and only `dist/` plus production dependencies are copied into the `node:26-slim` runtime image — no compiler, no source, no dev dependencies ship. The image runs as a fixed non-root UID/GID (`10001:10001`), not the base image's default `node` user, so the UID is predictable for volume permissions and Kubernetes `runAsUser`.
+Multi-stage: a `node:26` builder compiles TypeScript, and only `dist/` plus production dependencies are copied into the `node:26-slim` runtime image — no compiler, no source, no dev dependencies ship. The base image's package managers (npm, npx, corepack, yarn) are removed from the runtime image after the production install, so `docker exec ... npm` is not available; `node` and `/bin/sh` are. The image runs as a fixed non-root UID/GID (`10001:10001`), not the base image's default `node` user, so the UID is predictable for volume permissions and Kubernetes `runAsUser`.
 
 ## Run
 

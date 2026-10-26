@@ -4,6 +4,16 @@ All notable changes to this project are documented in this file. Format follows 
 
 ## [Unreleased]
 
+### Security
+
+- `undici` 8.12.3 (from 8.12.1, which `0.4.2` shipped): fixes GHSA-4qv8-2p9j-2685 (EventSource parser unbounded memory), GHSA-f72v-6w45-q472 (SRI bypass), and GHSA-xjj6-f33q-929c (unhandled error on excessive content-encodings).
+- The runtime image no longer contains npm, npx, corepack, or yarn. They were only needed for the build-time production install, and npm's own bundled dependency tree carried 13 fixable Trivy findings (`brace-expansion`, `ip-address`, `postcss-selector-parser`, npm's bundled `undici`). `node` and `/bin/sh` remain.
+
+### Changed
+
+- Dependency refresh within existing ranges: `@biomejs/biome` 2.6.3 (its new Markdown formatter is disabled in `biome.json`, keeping docs formatting unchanged), `@opentelemetry/api` 1.10.0 (via `prom-client`), and dev-only transitive updates.
+- CI: `actions/setup-node` 7.1.0, `docker/login-action` and `github/codeql-action/upload-sarif` minor/patch bumps.
+
 ## [0.4.2] - 2026-10-26
 
 ### Security

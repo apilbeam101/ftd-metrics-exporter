@@ -38,7 +38,7 @@
     "undici": "^8.12.3"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.5.13",
+    "@biomejs/biome": "^2.6.3",
     "@types/node": "^26.6.1",
     "selfsigned": "^5.5.0",
     "typescript": "^7.0.2"
