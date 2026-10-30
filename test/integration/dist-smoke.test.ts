@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
 import https from 'node:https';
-import { createServer } from 'node:net';
+import { connect, createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -85,8 +85,12 @@ function emptyCwd(): string {
   return mkdtempSync(join(tmpdir(), 'ftd-dist-smoke-'));
 }
 
-function spawnExporter(args: string[], env: Record<string, string | undefined>): SpawnedExporter {
-  const child = spawn(process.execPath, [distEntry, ...args], {
+function spawnExporter(
+  args: string[],
+  env: Record<string, string | undefined>,
+  nodeArgs: string[] = [],
+): SpawnedExporter {
+  const child = spawn(process.execPath, [...nodeArgs, distEntry, ...args], {
     env: { ...env },
     cwd: emptyCwd(),
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -118,19 +122,29 @@ function spawnExporter(args: string[], env: Record<string, string | undefined>):
 async function waitForPortListening(port: number, timeoutMs = 10_000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    if (await isPortBound(port)) return;
+    if (await isPortListening(port)) return;
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
   throw new Error(`port ${port} was not listening within ${timeoutMs}ms`);
 }
 
-function isPortBound(port: number): Promise<boolean> {
+// A connect probe, not a bind probe: probing by binding the port briefly
+// holds it, so an exporter listen() landing in that instant fails with
+// EADDRINUSE and the test times out waiting for a port nobody will open.
+// The timeout covers Windows, which retries a refused loopback connect for
+// ~2s instead of failing fast; a listening loopback port accepts instantly.
+function isPortListening(port: number): Promise<boolean> {
   return new Promise((resolve) => {
-    const probe = createServer();
-    probe.once('error', () => resolve(true)); // EADDRINUSE -> something is already listening
-    probe.listen(port, '127.0.0.1', () => {
-      probe.close(() => resolve(false));
+    const socket = connect({ port, host: '127.0.0.1', timeout: 1_000 });
+    socket.once('connect', () => {
+      socket.destroy();
+      resolve(true);
     });
+    socket.once('timeout', () => {
+      socket.destroy();
+      resolve(false);
+    });
+    socket.once('error', () => resolve(false));
   });
 }
 
@@ -202,7 +216,7 @@ test('invalid config: non-zero exit, actionable message, and the configured port
     `expected the missing-variable name in the error message, got: ${exporter.stderr}`,
   );
   assert.equal(
-    await isPortBound(port),
+    await isPortListening(port),
     false,
     'the configured port must never be opened on a config error',
   );
@@ -246,6 +260,43 @@ test('valid config: the metrics server listens, /healthz is 200 immediately, /re
 // `install()`'s registered handlers directly rather than through a real
 // OS signal delivery mechanism.
 
+// --- Regression: signal handlers must already be installed when the metrics port binds. The
+// signal tests here send their signal the moment isPortListening() sees the port, and the port is
+// bound before server.start()'s promise resolves -- with lifecycle.install() placed after
+// `await server.start()`, a signal could land in between and kill the process via Node's default
+// handling (`code=null signal=SIGTERM`), intermittently, on a loaded CI runner. Observing the
+// listener count at listen() time catches that ordering deterministically, on every platform.
+test('signal handlers are installed before the metrics server binds its port', async (t) => {
+  if (!requireDistBuilt(t)) return;
+  // Not imported from the probe module: importing it would install its
+  // listen() patch in this test process too.
+  const MARKER = 'SIGNAL_HANDLERS_AT_LISTEN';
+  const probe = new URL('./support/signal-handlers-at-listen.ts', import.meta.url).href;
+  const port = await findFreePort();
+  const exporter = spawnExporter([], sccEnv({ METRICS_PORT: String(port) }), [
+    '--experimental-strip-types',
+    '--disable-warning=ExperimentalWarning',
+    `--import=${probe}`,
+  ]);
+  try {
+    await waitForPortListening(port);
+    // Requires the trailing newline, so a partially delivered line is never parsed.
+    const pattern = new RegExp(`^${MARKER} (.*)\\n`, 'm');
+    const deadline = Date.now() + 5_000;
+    while (!pattern.test(exporter.stderr) && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    const match = pattern.exec(exporter.stderr);
+    assert.ok(match, `probe never reported a listen() call; stderr was:\n${exporter.stderr}`);
+    const counts = JSON.parse(match[1] ?? '') as { SIGTERM: number; SIGINT: number };
+    assert.ok(counts.SIGTERM >= 1, `no SIGTERM handler at listen() time: ${match[0]}`);
+    assert.ok(counts.SIGINT >= 1, `no SIGINT handler at listen() time: ${match[0]}`);
+  } finally {
+    exporter.child.kill('SIGKILL');
+    await exporter.exitCode;
+  }
+});
+
 for (const signal of ['SIGTERM', 'SIGINT'] as const) {
   test(`${signal}: stops accepting connections and exits 0 within the shutdown budget`, async (t) => {
     if (process.platform === 'win32') {
@@ -276,7 +327,7 @@ for (const signal of ['SIGTERM', 'SIGINT'] as const) {
     // within exitCode's promise; a lingering handle would have kept the
     // child process running past the hard-exit timer instead.
     assert.equal(
-      await isPortBound(port),
+      await isPortListening(port),
       false,
       'the port must be released after a graceful shutdown',
     );

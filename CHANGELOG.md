@@ -4,6 +4,14 @@ All notable changes to this project are documented in this file. Format follows 
 
 ## [Unreleased]
 
+### Fixed
+
+- A `SIGTERM`/`SIGINT` arriving just as the metrics port binds now runs the graceful shutdown (exit 0) instead of killing the process outright. Signal handlers are now installed before the server starts, not after.
+
+### Changed
+
+- CI: the monthly image rebuild smoke-tests the image (`--version` and baked-in commit) before republishing the moving tags, records the release tag's commit rather than `main`'s, and is scanned by digest straight after. Image scans now report fixable high/critical findings only, and close the tracking issue when clean; an independent mid-month scan of `latest` remains as the backstop.
+
 ## [0.4.3] - 2026-10-26
 
 ### Security

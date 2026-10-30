@@ -44,7 +44,15 @@ import { COMMIT, NODE_VERSION, VERSION } from './version.ts';
  * 5. `build_info`; optional `collectDefaultMetrics()`.
  * 6. Construct the one backend (construction only — no I/O; both adapters
  *    allocate nothing until `init()` is called).
- * 7. Start the HTTP server — *before* `backend.init()`, not just before the
+ * 7. Construct the poller (construction only — no scheduling until
+ *    `start()`) and call `lifecycle.install()`, both *before* the HTTP
+ *    server starts. Without a handler registered, Node's default signal
+ *    handling terminates the process directly instead of running the
+ *    documented graceful-shutdown sequence. Real CI runs found this twice:
+ *    once with install() after `init()`, and again with it after
+ *    `server.start()` — the port is visibly bound before start()'s promise
+ *    resolves, so a signal sent the moment it appears could still win.
+ * 8. Start the HTTP server — *before* `backend.init()`, not just before the
  *    poller. DESIGN.md §7.2 requires `/healthz` to never depend on upstream
  *    health, and an independent review of an earlier draft of this stage
  *    found that awaiting `backend.init()` first left `/healthz`
@@ -55,15 +63,6 @@ import { COMMIT, NODE_VERSION, VERSION } from './version.ts';
  *    from the backend) means `/healthz` answers as soon as the process is
  *    listening, and `/readyz` correctly reports 503 for as long as
  *    `init()`/the first poll takes.
- * 8. Construct the poller (construction only — no scheduling until
- *    `start()`) and call `lifecycle.install()`, both *before*
- *    `backend.init()`, not after. A real CI run found the gap this
- *    ordering closes: with signal handlers installed only once `init()`
- *    had already succeeded, a `SIGTERM`/`SIGINT` arriving during the
- *    (potentially slow/hanging, per point 7 above) `init()` call had no
- *    handler registered at all, so Node's default signal handling
- *    terminated the process directly instead of running the documented
- *    graceful-shutdown sequence.
  * 9. `backend.init()`. On failure, `lifecycle.shutdown(1)` runs the same
  *    guarded stop-server/stop-poller/close-backend sequence a signal would
  *    have triggered (poller.stop() is a no-op here, since `start()` is
@@ -245,26 +244,17 @@ async function main(): Promise<void> {
     ...(config.metricsTls !== undefined && { tls: config.metricsTls }),
   });
 
-  try {
-    const bound = await server.start();
-    logger.info('metrics server listening', { address: bound.address, port: bound.port });
-  } catch (cause) {
-    logger.error('metrics server failed to start — exiting', errorMeta(cause));
-    process.exit(1);
-    return;
-  }
-
   // createPoller() only constructs — no scheduling happens until start()
   // below — so it, and lifecycle.install(), can and must happen before
-  // backend.init(), not after. A real CI run found the gap this closes:
-  // with install() called only after a successful init(), a SIGTERM/SIGINT
-  // arriving during server startup or backend.init() (which DESIGN.md §7.2
-  // already documents as potentially slow/hanging — the whole reason the
-  // server starts before init() in the first place) had no signal handler
-  // registered at all, so Node's default handling terminated the process
-  // via the signal itself rather than exiting 0 through the graceful
-  // sequence — observed directly as `code=null signal=SIGINT` against a
-  // real subprocess whose SIGINT landed in exactly this window.
+  // server.start(), not merely before backend.init(). Until install() runs,
+  // a SIGTERM/SIGINT gets Node's default handling and terminates the process
+  // via the signal itself (`code=null signal=SIGTERM`) instead of exiting 0
+  // through the graceful sequence. Real CI runs caught this twice: first
+  // with install() after init(), then with it after server.start() — the
+  // port is bound (and a supervisor or probe can see it) before start()'s
+  // promise resolves, so a signal sent the moment the port appears could
+  // still land before install(). server.stop() resolves even if the server
+  // never finished starting, so shutting down from this early is safe.
   const poller = createPoller({
     backend,
     cache,
@@ -277,6 +267,15 @@ async function main(): Promise<void> {
 
   const lifecycle = createLifecycle({ server, poller, backend, logger });
   lifecycle.install();
+
+  try {
+    const bound = await server.start();
+    logger.info('metrics server listening', { address: bound.address, port: bound.port });
+  } catch (cause) {
+    logger.error('metrics server failed to start — exiting', errorMeta(cause));
+    process.exit(1);
+    return;
+  }
 
   try {
     await backend.init();
