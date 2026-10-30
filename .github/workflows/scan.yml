@@ -1,16 +1,25 @@
-name: Monthly image vulnerability scan
+name: Image vulnerability scan
 
-# Scans the published `latest` tag (kept current by rebuild.yml, which runs
-# earlier the same day) and surfaces findings via the Security tab. This is
-# the load-bearing half of the monthly cadence described in SECURITY.md and
-# the implementation plan: a rebuild that silently stops (see the 60-day
-# scheduled-workflow auto-disable note in rebuild.yml) is caught by this
-# scan reporting a stale/vulnerable image, rather than by nothing at all.
+# Two entry points:
+# - Called by rebuild.yml right after it publishes, with the exact digest it
+#   pushed -- so the post-rebuild scan always covers the rebuilt image, not
+#   whatever `latest` happened to point at when an independent schedule fired
+#   (GitHub routinely delays scheduled runs by hours, so two separate crons
+#   never guaranteed ordering).
+# - Its own mid-month schedule against `latest`. This is the load-bearing
+#   backstop described in SECURITY.md: a rebuild that silently stops (see the
+#   60-day scheduled-workflow auto-disable note in rebuild.yml) never calls
+#   this workflow, so only this independent run can surface the resulting
+#   stale image. It also catches advisories disclosed since the 1st.
 on:
+  workflow_call:
+    inputs:
+      image-ref:
+        description: Image reference to scan, ideally pinned by digest
+        required: true
+        type: string
   schedule:
-    # A few hours after rebuild.yml's 04:17 UTC run, so this scans what was
-    # just published rather than racing it.
-    - cron: "0 9 1 * *"
+    - cron: "0 9 15 * *"
   workflow_dispatch: {}
 
 permissions:
@@ -20,7 +29,7 @@ permissions:
   issues: write
 
 env:
-  IMAGE: ghcr.io/apilbeam101/ftd-metrics-exporter:latest
+  IMAGE: ${{ inputs.image-ref || 'ghcr.io/apilbeam101/ftd-metrics-exporter:latest' }}
 
 jobs:
   scan:
@@ -38,7 +47,11 @@ jobs:
           key: trivy-db-${{ github.run_id }}
           restore-keys: trivy-db-
 
-      - name: Scan published image
+      # ignore-unfixed: a finding with no fixed package available cannot be
+      # resolved by a rebuild or a release, so counting it made the tracking
+      # issue grow every month (143 -> 180 -> 210) while the fixable count
+      # was 0. Both the SARIF and the issue count are now actionable-only.
+      - name: Scan image
         id: scan
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
@@ -46,12 +59,17 @@ jobs:
           format: sarif
           output: trivy-results.sarif
           severity: HIGH,CRITICAL
+          ignore-unfixed: true
           exit-code: "0" # report, don't fail the workflow -- this is a monitoring job, not a gate
           cache-dir: .trivy-cache
 
+      # Pinned to the category every prior upload used. Under workflow_call
+      # the default would derive from the caller's workflow instead, splitting
+      # alerts across two categories so neither closes the other's stale ones.
       - uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         with:
           sarif_file: trivy-results.sarif
+          category: .github/workflows/scan.yml:scan
 
       - name: Count high/critical findings
         id: count
@@ -63,8 +81,7 @@ jobs:
           ")
           echo "count=$count" >> "$GITHUB_OUTPUT"
 
-      - name: Open or update tracking issue on new findings
-        if: steps.count.outputs.count != '0'
+      - name: Open, update, or close tracking issue
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           COUNT: ${{ steps.count.outputs.count }}
@@ -74,11 +91,18 @@ jobs:
           # idempotently (--force makes a second run a no-op) rather than
           # assuming a maintainer created it by hand before the first run.
           gh label create base-image-cve --description "Base image CVE tracking (scan.yml)" --color b60205 --force
-          title="Monthly scan: $COUNT high/critical finding(s) in the published image"
           existing=$(gh issue list --label base-image-cve --state open --json number --jq '.[0].number')
-          body="Trivy found $COUNT high/critical finding(s) in \`${{ env.IMAGE }}\` on $(date -u +%Y-%m-%d). See the Security tab for details, or the workflow run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}.
+          run_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          if [ "$COUNT" = "0" ]; then
+            if [ -n "$existing" ]; then
+              gh issue close "$existing" --comment "Trivy found no fixable high/critical findings in \`$IMAGE\` on $(date -u +%Y-%m-%d). Closing. Workflow run: $run_url"
+            fi
+            exit 0
+          fi
+          title="Image scan: $COUNT fixable high/critical finding(s) in the published image"
+          body="Trivy found $COUNT fixable high/critical finding(s) in \`$IMAGE\` on $(date -u +%Y-%m-%d). See the Security tab for details, or the workflow run: $run_url
 
-          Per SECURITY.md, these are addressed by the next monthly rebuild unless a source-level fix is needed sooner."
+          Per SECURITY.md, base-image findings are addressed by the next monthly rebuild (or an out-of-band \`rebuild.yml\` dispatch if severe); a finding in an npm dependency needs a source release, since the rebuild reuses the release tag's lockfile."
           if [ -n "$existing" ]; then
             gh issue comment "$existing" --body "$body"
           else

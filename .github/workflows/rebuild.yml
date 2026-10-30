@@ -35,6 +35,8 @@ jobs:
   rebuild:
     name: rebuild latest release from source, republish moving tags
     runs-on: ubuntu-latest
+    outputs:
+      image-ref: ${{ env.IMAGE }}@${{ steps.push.outputs.digest }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -52,14 +54,50 @@ jobs:
           major=$(echo "$version" | cut -d. -f1)
           minor=$(echo "$version" | cut -d. -f1-2)
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "major=$major" >> "$GITHUB_OUTPUT"
           echo "minor=$minor" >> "$GITHUB_OUTPUT"
+          # github.sha is main's head on schedule/dispatch, not the tag's
+          # commit -- the two diverge as soon as main moves past the release.
+          echo "commit=$(git rev-parse "$tag^{commit}")" >> "$GITHUB_OUTPUT"
 
       - name: Checkout the release tag's source (not main)
         run: git checkout "${{ steps.latest.outputs.tag }}"
 
       - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      # The floating node:26/node:26-slim tags can move a full Node minor
+      # between rebuilds, and nothing else gates what this job republishes to
+      # `latest`. amd64 only: loading into the local daemon needs a single
+      # platform, and arm64 here would run under QEMU anyway.
+      - name: Build smoke-test image (amd64, not pushed)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: ftd-metrics-exporter:smoke
+          build-args: |
+            FTD_EXPORTER_COMMIT=${{ steps.latest.outputs.commit }}
+
+      - name: Smoke-test the rebuilt image
+        env:
+          EXPECTED_VERSION: ${{ steps.latest.outputs.version }}
+          EXPECTED_COMMIT: ${{ steps.latest.outputs.commit }}
+        run: |
+          actual=$(docker run --rm ftd-metrics-exporter:smoke --version)
+          if [ "$actual" != "$EXPECTED_VERSION" ]; then
+            echo "Image reports version '$actual', expected '$EXPECTED_VERSION'." >&2
+            exit 1
+          fi
+          commit=$(docker run --rm --entrypoint node ftd-metrics-exporter:smoke -p 'process.env.FTD_EXPORTER_COMMIT')
+          if [ "$commit" != "$EXPECTED_COMMIT" ]; then
+            echo "Image reports commit '$commit', expected '$EXPECTED_COMMIT'." >&2
+            exit 1
+          fi
+          echo "Rebuilt $EXPECTED_VERSION ($EXPECTED_COMMIT) on Node $(docker run --rm --entrypoint node ftd-metrics-exporter:smoke -p process.version)"
 
       - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
@@ -82,10 +120,22 @@ jobs:
             ${{ env.IMAGE }}:${{ steps.latest.outputs.major }}
             ${{ env.IMAGE }}:latest
           build-args: |
-            FTD_EXPORTER_COMMIT=${{ github.sha }}
+            FTD_EXPORTER_COMMIT=${{ steps.latest.outputs.commit }}
 
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-name: ${{ env.IMAGE }}
           subject-digest: ${{ steps.push.outputs.digest }}
           push-to-registry: true
+
+  scan:
+    name: scan the rebuilt image
+    needs: rebuild
+    permissions:
+      contents: read
+      security-events: write
+      packages: read
+      issues: write
+    uses: ./.github/workflows/scan.yml
+    with:
+      image-ref: ${{ needs.rebuild.outputs.image-ref }}
